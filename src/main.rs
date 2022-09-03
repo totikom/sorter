@@ -46,7 +46,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
         let mut shifted_trap = [[false; WIDTH]; HEIGHT];
 
         let filled_trap_count = self.0.iter().fold(0, |acc, line| {
-            acc + line.iter().fold(0, |acc, x| if *x { acc } else { acc + 1 })
+            acc + line.iter().fold(0, |acc, x| if *x { acc + 1 } else { acc })
         });
 
         let target_size: usize = f64::sqrt(filled_trap_count as f64).floor() as usize;
@@ -61,7 +61,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
             .zip(shifted_trap.iter_mut())
             .enumerate()
             .map(|(i, (line, shifted_line))| {
-                let mut sum = line.iter().fold(0, |acc, x| if *x { acc } else { acc + 1 });
+                let mut sum = line.iter().fold(0, |acc, x| if *x { acc + 1 } else { acc });
 
                 let mut breaked = false;
                 for j in pointer..start_index + target_size {
@@ -74,6 +74,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
                         break;
                     }
                 }
+
                 if sum > 0 {
                     for j in start_index..pointer {
                         if sum > 0 {
@@ -85,6 +86,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
                         }
                     }
                 }
+
                 if sum > 0 {
                     for j in start_index + target_size..WIDTH {
                         if sum > 0 {
@@ -95,6 +97,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
                         }
                     }
                 }
+
                 if sum > 0 {
                     for j in (0..start_index).rev() {
                         if sum > 0 {
@@ -109,6 +112,8 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
                 if !breaked {
                     pointer = start_index;
                 }
+
+                dbg!(&shifted_line);
 
                 let start_iterator = line
                     .iter()
@@ -138,6 +143,44 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
         };
 
         (moves, shifted_trap)
+    }
+
+    fn from_nums(array: &[[u8; WIDTH]; HEIGHT]) -> Self {
+        let mut new_array = [[false; WIDTH]; HEIGHT];
+        for (i, row) in new_array.iter_mut().enumerate() {
+            for (j, val) in row.iter_mut().enumerate() {
+                if array[i][j] != 0 {
+                    *val = true;
+                }
+            }
+        }
+
+        Self(new_array)
+    }
+
+    fn to_nums(&self) -> [[u8; WIDTH]; HEIGHT] {
+        let mut new_array = [[0; WIDTH]; HEIGHT];
+        for (i, row) in new_array.iter_mut().enumerate() {
+            for (j, val) in row.iter_mut().enumerate() {
+                if self.0[i][j] {
+                    *val = 1;
+                }
+            }
+        }
+
+        new_array
+    }
+
+    fn atom_count(&self) -> usize {
+        let mut sum = 0;
+        for row in self.0 {
+            for val in row {
+                if val {
+                    sum += 1;
+                }
+            }
+        }
+        sum
     }
 }
 
@@ -180,6 +223,11 @@ impl<const WIDTH: usize, const HEIGHT: usize> ShiftedTrap<WIDTH, HEIGHT> {
 
         (moves, Trap(trap))
     }
+
+    #[cfg(test)]
+    fn get_trap(self) -> Trap<WIDTH, HEIGHT> {
+        Trap(self.array)
+    }
 }
 
 struct Signal {
@@ -196,11 +244,11 @@ impl<const WIDTH: usize, const HEIGHT: usize> TrapParams<WIDTH, HEIGHT> {
         let mut y_signal_i = Array1::<f64>::zeros(self.buff_size);
         let mut y_signal_q = Array1::<f64>::zeros(self.buff_size);
 
-        Zip::indexed(&mut y_signal_i).par_apply(|i, y| {
+        Zip::indexed(&mut y_signal_i).par_for_each(|i, y| {
             *y = self.signal_amplitude * (i as f64 / self.sample_rate * TAU * line_freq).cos();
         });
 
-        Zip::indexed(&mut y_signal_q).par_apply(|i, y| {
+        Zip::indexed(&mut y_signal_q).par_for_each(|i, y| {
             *y = self.signal_amplitude * (i as f64 / self.sample_rate * TAU * line_freq).sin();
         });
 
@@ -225,7 +273,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> TrapParams<WIDTH, HEIGHT> {
             };
             let move_time = self.turn_on_time + freq_diff.abs() / atom_speed_prepared;
 
-            Zip::indexed(&mut x_signal_i).par_apply(|i, x| {
+            Zip::indexed(&mut x_signal_i).par_for_each(|i, x| {
                 let t = i as f64 / self.sample_rate;
                 if t < self.turn_on_time {
                     let amplitude = amplitude_prepared * t;
@@ -239,7 +287,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> TrapParams<WIDTH, HEIGHT> {
                 }
             });
 
-            Zip::indexed(&mut x_signal_q).par_apply(|i, x| {
+            Zip::indexed(&mut x_signal_q).par_for_each(|i, x| {
                 let t = i as f64 / self.sample_rate;
                 if t < self.turn_on_time {
                     let amplitude = amplitude_prepared * t;
@@ -263,6 +311,203 @@ impl<const WIDTH: usize, const HEIGHT: usize> TrapParams<WIDTH, HEIGHT> {
     }
 
     fn generate_vertical_move(&self, mov: VerticalMove) -> Signal {
+        let line_freq = self.x_frequencies[mov.line_index] - self.local_oscillator_frequency;
+
+        let mut x_signal_i = Array1::<f64>::zeros(self.buff_size);
+        let mut x_signal_q = Array1::<f64>::zeros(self.buff_size);
+
+        Zip::indexed(&mut x_signal_i).par_for_each(|i, x| {
+            *x = self.signal_amplitude * (i as f64 / self.sample_rate * TAU * line_freq).cos();
+        });
+
+        Zip::indexed(&mut x_signal_q).par_for_each(|i, x| {
+            *x = self.signal_amplitude * (i as f64 / self.sample_rate * TAU * line_freq).sin();
+        });
+
+        let mut y_signal_i = Array1::<f64>::zeros(self.buff_size);
+        let mut y_signal_q = Array1::<f64>::zeros(self.buff_size);
+
+        for (start_idx, end_idx) in mov.moves {
+            let start_freq_prepared =
+                (self.y_frequencies[start_idx] - self.local_oscillator_frequency) * TAU
+                    / self.sample_rate;
+            let end_freq_prepared = (self.y_frequencies[end_idx] - self.local_oscillator_frequency)
+                * TAU
+                / self.sample_rate;
+            let amplitude_prepared = self.signal_amplitude / self.turn_on_time;
+
+            let freq_diff = end_freq_prepared - start_freq_prepared;
+
+            let atom_speed_prepared = if freq_diff > 0.0 {
+                self.atom_speed * TAU / self.sample_rate
+            } else {
+                -self.atom_speed * TAU / self.sample_rate
+            };
+            let move_time = self.turn_on_time + freq_diff.abs() / atom_speed_prepared;
+
+            Zip::indexed(&mut y_signal_i).par_for_each(|i, y| {
+                let t = i as f64 / self.sample_rate;
+                if t < self.turn_on_time {
+                    let amplitude = amplitude_prepared * t;
+                    *y += amplitude * (i as f64 * start_freq_prepared).cos();
+                } else if t < move_time {
+                    let freq = start_freq_prepared + atom_speed_prepared * (t - self.turn_on_time);
+                    *y += self.signal_amplitude * (i as f64 * freq).cos();
+                } else if t < move_time + self.turn_on_time {
+                    let amplitude = amplitude_prepared * (move_time + self.turn_on_time - t);
+                    *y += amplitude * (i as f64 * end_freq_prepared).cos();
+                }
+            });
+
+            Zip::indexed(&mut y_signal_q).par_for_each(|i, y| {
+                let t = i as f64 / self.sample_rate;
+                if t < self.turn_on_time {
+                    let amplitude = amplitude_prepared * t;
+                    *y += amplitude * (i as f64 * start_freq_prepared).sin();
+                } else if t < move_time {
+                    let freq = start_freq_prepared + atom_speed_prepared * (t - self.turn_on_time);
+                    *y += self.signal_amplitude * (i as f64 * freq).sin();
+                } else if t < move_time + self.turn_on_time {
+                    let amplitude = amplitude_prepared * (move_time + self.turn_on_time - t);
+                    *y += amplitude * (i as f64 * end_freq_prepared).sin();
+                }
+            });
+        }
+
+        Signal {
+            x_signal_i,
+            x_signal_q,
+            y_signal_i,
+            y_signal_q,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn one_atom() {
+        let trap = Trap([[true, false, false, false]]);
+
+        let (_, shifted_trap) = Trap::shift(trap);
+
+        let expected_trap = Trap([[false, true, false, false]]);
+
+        assert_eq!(shifted_trap.get_trap(), expected_trap);
+    }
+
+    #[test]
+    fn a_few_atoms() {
+        let trap = Trap([[true, false, false, false, true, false, true, true]]);
+
+        let (_, shifted_trap) = Trap::shift(trap);
+
+        let expected_trap = Trap([[false, false, false, true, true, true, true, false]]);
+
+        assert_eq!(shifted_trap.get_trap(), expected_trap);
+    }
+
+    #[test]
+    fn big_array_shift() {
+        let trap = Trap::from_nums(&[
+            [0, 0, 0, 1],
+            [0, 0, 1, 0],
+            [0, 0, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ]);
+
+        let (_, shifted_trap) = Trap::shift(trap);
+
+        let expected_trap = Trap::from_nums(&[
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+        ]);
+
+        assert_eq!(shifted_trap.get_trap(), expected_trap);
+    }
+
+    #[test]
+    fn big_array() {
+        let trap = Trap::from_nums(&[
+            [0, 0, 0, 1],
+            [0, 0, 1, 0],
+            [0, 0, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ]);
+
+        let trap = ShiftedTrap::merge(Trap::shift(trap).1).1;
+
+        let expected_trap = Trap::from_nums(&[
+            [0, 0, 0, 0],
+            [0, 1, 1, 0],
+            [0, 1, 1, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ]);
+
+        assert_eq!(trap, expected_trap);
+    }
+
+    #[test]
+    fn big_array2() {
+        let trap = Trap::from_nums(&[
+            [0, 0, 0, 1],
+            [0, 0, 1, 0],
+            [0, 0, 0, 0],
+            [0, 1, 1, 0],
+            [0, 0, 0, 0],
+        ]);
+
+        let trap = ShiftedTrap::merge(Trap::shift(trap).1).1;
+
+        let expected_trap = Trap::from_nums(&[
+            [0, 0, 0, 0],
+            [0, 1, 1, 0],
+            [0, 1, 1, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ]);
+
+        assert_eq!(trap, expected_trap);
+    }
+    #[test]
+    fn huge_array() {
+        let trap = Trap::from_nums(&[
+            [0, 0, 0, 1, 0, 0, 0],
+            [1, 0, 0, 0, 0, 0, 1],
+            [0, 1, 0, 1, 0, 0, 1],
+            [1, 1, 0, 1, 1, 0, 0],
+            [0, 1, 0, 1, 0, 1, 0],
+            [1, 0, 0, 1, 0, 1, 1],
+            [0, 1, 1, 1, 1, 0, 1],
+            [1, 0, 0, 1, 0, 0, 1],
+        ]);
+
+        let trap = ShiftedTrap::get_trap(Trap::shift(trap).1);
+
+        let expected_trap = Trap::from_nums(&[
+            [0, 1, 0, 0, 0, 0, 0],
+            [0, 0, 1, 1, 0, 0, 0],
+            [0, 1, 0, 0, 1, 1, 0],
+            [0, 0, 1, 1, 1, 1, 0],
+            [0, 1, 1, 1, 0, 0, 0],
+            [0, 1, 1, 0, 1, 1, 0],
+            [0, 1, 1, 1, 1, 1, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+        ]);
+
+        for row in trap.to_nums() {
+            println!("{:?}", row);
+        }
         todo!();
+        //assert_eq!(trap.to_nums(), expected_trap.to_nums());
     }
 }
