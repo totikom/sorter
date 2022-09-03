@@ -1,12 +1,21 @@
-use ndarray::Array2;
+use ndarray::parallel::prelude::*;
+use ndarray::{Array1, Array2, Zip};
+use std::f64::consts::TAU;
+
 fn main() {
     println!("Hello, world!");
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 struct TrapParams<const WIDTH: usize, const HEIGHT: usize> {
-    x_frequencies: [f64; WIDTH],
-    y_frequencies: [f64; HEIGHT],
+    x_frequencies: [f64; WIDTH],     // in Hz
+    y_frequencies: [f64; HEIGHT],    // in Hz
+    turn_on_time: f64,               // is seconds, time to turn on the laser
+    local_oscillator_frequency: f64, // in Hz
+    signal_amplitude: f64,           // amplitude of one harmonic
+    buff_size: usize,                // Size of the SDR buffer
+    sample_rate: f64,                // Sample rate of the SDR
+    atom_speed: f64,                 // in Hz/s
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -170,5 +179,90 @@ impl<const WIDTH: usize, const HEIGHT: usize> ShiftedTrap<WIDTH, HEIGHT> {
             .collect();
 
         (moves, Trap(trap))
+    }
+}
+
+struct Signal {
+    x_signal_i: Array1<f64>,
+    x_signal_q: Array1<f64>,
+    y_signal_i: Array1<f64>,
+    y_signal_q: Array1<f64>,
+}
+
+impl<const WIDTH: usize, const HEIGHT: usize> TrapParams<WIDTH, HEIGHT> {
+    fn generate_horizontal_move(&self, mov: HorizontalMove) -> Signal {
+        let line_freq = self.y_frequencies[mov.line_index] - self.local_oscillator_frequency;
+
+        let mut y_signal_i = Array1::<f64>::zeros(self.buff_size);
+        let mut y_signal_q = Array1::<f64>::zeros(self.buff_size);
+
+        Zip::indexed(&mut y_signal_i).par_apply(|i, y| {
+            *y = self.signal_amplitude * (i as f64 / self.sample_rate * TAU * line_freq).cos();
+        });
+
+        Zip::indexed(&mut y_signal_q).par_apply(|i, y| {
+            *y = self.signal_amplitude * (i as f64 / self.sample_rate * TAU * line_freq).sin();
+        });
+
+        let mut x_signal_i = Array1::<f64>::zeros(self.buff_size);
+        let mut x_signal_q = Array1::<f64>::zeros(self.buff_size);
+
+        for (start_idx, end_idx) in mov.moves {
+            let start_freq_prepared =
+                (self.x_frequencies[start_idx] - self.local_oscillator_frequency) * TAU
+                    / self.sample_rate;
+            let end_freq_prepared = (self.x_frequencies[end_idx] - self.local_oscillator_frequency)
+                * TAU
+                / self.sample_rate;
+            let amplitude_prepared = self.signal_amplitude / self.turn_on_time;
+
+            let freq_diff = end_freq_prepared - start_freq_prepared;
+
+            let atom_speed_prepared = if freq_diff > 0.0 {
+                self.atom_speed * TAU / self.sample_rate
+            } else {
+                -self.atom_speed * TAU / self.sample_rate
+            };
+            let move_time = self.turn_on_time + freq_diff.abs() / atom_speed_prepared;
+
+            Zip::indexed(&mut x_signal_i).par_apply(|i, x| {
+                let t = i as f64 / self.sample_rate;
+                if t < self.turn_on_time {
+                    let amplitude = amplitude_prepared * t;
+                    *x += amplitude * (i as f64 * start_freq_prepared).cos();
+                } else if t < move_time {
+                    let freq = start_freq_prepared + atom_speed_prepared * (t - self.turn_on_time);
+                    *x += self.signal_amplitude * (i as f64 * freq).cos();
+                } else if t < move_time + self.turn_on_time {
+                    let amplitude = amplitude_prepared * (move_time + self.turn_on_time - t);
+                    *x += amplitude * (i as f64 * end_freq_prepared).cos();
+                }
+            });
+
+            Zip::indexed(&mut x_signal_q).par_apply(|i, x| {
+                let t = i as f64 / self.sample_rate;
+                if t < self.turn_on_time {
+                    let amplitude = amplitude_prepared * t;
+                    *x += amplitude * (i as f64 * start_freq_prepared).sin();
+                } else if t < move_time {
+                    let freq = start_freq_prepared + atom_speed_prepared * (t - self.turn_on_time);
+                    *x += self.signal_amplitude * (i as f64 * freq).sin();
+                } else if t < move_time + self.turn_on_time {
+                    let amplitude = amplitude_prepared * (move_time + self.turn_on_time - t);
+                    *x += amplitude * (i as f64 * end_freq_prepared).sin();
+                }
+            });
+        }
+
+        Signal {
+            x_signal_i,
+            x_signal_q,
+            y_signal_i,
+            y_signal_q,
+        }
+    }
+
+    fn generate_vertical_move(&self, mov: VerticalMove) -> Signal {
+        todo!();
     }
 }
