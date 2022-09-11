@@ -1,6 +1,7 @@
 use dbg_pls::{color, pretty, DebugPls, Formatter};
 use ndarray::parallel::prelude::*;
 use ndarray::{Array1, Array2, Zip};
+use rayon::iter::ParallelExtend;
 use std::f64::consts::TAU;
 use std::fmt;
 
@@ -143,7 +144,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
 
         let new_trap = [[false; WIDTH]; HEIGHT];
 
-        std::mem::replace(&mut self.0, new_trap);
+        let _ = std::mem::replace(&mut self.0, new_trap);
 
         (moves, shifted_trap)
     }
@@ -239,7 +240,7 @@ struct Signal {
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize> TrapParams<WIDTH, HEIGHT> {
-    fn generate_horizontal_move(&self, mov: HorizontalMove) -> Signal {
+    fn generate_horizontal_move(&self, mov: &HorizontalMove) -> Signal {
         let line_freq = self.y_frequencies[mov.line_index] - self.local_oscillator_frequency;
 
         let mut y_signal_i = Array1::<f64>::zeros(self.buff_size);
@@ -256,7 +257,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> TrapParams<WIDTH, HEIGHT> {
         let mut x_signal_i = Array1::<f64>::zeros(self.buff_size);
         let mut x_signal_q = Array1::<f64>::zeros(self.buff_size);
 
-        for (start_idx, end_idx) in mov.moves {
+        for &(start_idx, end_idx) in &mov.moves {
             let start_freq_prepared =
                 (self.x_frequencies[start_idx] - self.local_oscillator_frequency) * TAU
                     / self.sample_rate;
@@ -311,7 +312,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> TrapParams<WIDTH, HEIGHT> {
         }
     }
 
-    fn generate_vertical_move(&self, mov: VerticalMove) -> Signal {
+    fn generate_vertical_move(&self, mov: &VerticalMove) -> Signal {
         let line_freq = self.x_frequencies[mov.line_index] - self.local_oscillator_frequency;
 
         let mut x_signal_i = Array1::<f64>::zeros(self.buff_size);
@@ -328,7 +329,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> TrapParams<WIDTH, HEIGHT> {
         let mut y_signal_i = Array1::<f64>::zeros(self.buff_size);
         let mut y_signal_q = Array1::<f64>::zeros(self.buff_size);
 
-        for (start_idx, end_idx) in mov.moves {
+        for &(start_idx, end_idx) in &mov.moves {
             let start_freq_prepared =
                 (self.y_frequencies[start_idx] - self.local_oscillator_frequency) * TAU
                     / self.sample_rate;
@@ -384,7 +385,19 @@ impl<const WIDTH: usize, const HEIGHT: usize> TrapParams<WIDTH, HEIGHT> {
     }
 
     pub fn generate_sorting_signal(&self, trap: &mut Trap<WIDTH, HEIGHT>) -> Vec<Signal> {
-        todo!();
+        let (horizontal_moves, shifted_trap) = trap.shift();
+        let vertical_moves = ShiftedTrap::merge(shifted_trap, trap);
+
+        let mut moves: Vec<Signal> = horizontal_moves
+            .par_iter()
+            .map(|mov| self.generate_horizontal_move(mov))
+            .collect();
+        moves.par_extend(
+            vertical_moves
+                .par_iter()
+                .map(|mov| self.generate_vertical_move(mov)),
+        );
+        moves
     }
 }
 

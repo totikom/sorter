@@ -547,6 +547,7 @@ dependencies = [
  "dbg-pls",
  "ndarray",
  "pretty_assertions",
+ "rayon",
 ]
 
 [[package]]
