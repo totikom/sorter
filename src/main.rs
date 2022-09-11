@@ -84,34 +84,33 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
                             sum -= 1;
                         } else {
                             pointer = j;
+                            breaked = true;
                             break;
                         }
                     }
-                }
 
-                if sum > 0 {
-                    for j in start_index + target_size..WIDTH {
-                        if sum > 0 {
-                            shifted_line[j] = true;
-                            sum -= 1;
-                        } else {
-                            break;
+                    if sum > 0 {
+                        for j in start_index + target_size..WIDTH {
+                            if sum > 0 {
+                                shifted_line[j] = true;
+                                sum -= 1;
+                            } else {
+                                break;
+                            }
                         }
                     }
-                }
 
-                if sum > 0 {
-                    for j in (0..start_index).rev() {
-                        if sum > 0 {
-                            shifted_line[j] = true;
-                            sum -= 1;
-                        } else {
-                            break;
+                    if sum > 0 {
+                        for j in (0..start_index).rev() {
+                            if sum > 0 {
+                                shifted_line[j] = true;
+                                sum -= 1;
+                            } else {
+                                break;
+                            }
                         }
                     }
-                }
-
-                if !breaked {
+                } else if !breaked {
                     pointer = start_index;
                 }
 
@@ -515,21 +514,18 @@ mod tests {
             [1, 0, 0, 1, 0, 0, 1],
         ]);
 
-        let trap = ShiftedTrap::get_trap(Trap::shift(trap).1);
+        let trap = ShiftedTrap::merge(Trap::shift(trap).1).1;
 
         let expected_trap = Trap::from_nums(&[
-            [0, 1, 0, 0, 0, 0, 0],
-            [0, 0, 1, 1, 0, 0, 0],
-            [0, 1, 0, 0, 1, 1, 0],
-            [0, 0, 1, 1, 1, 1, 0],
-            [0, 1, 1, 1, 0, 0, 0],
-            [0, 1, 1, 0, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0],
             [0, 1, 1, 1, 1, 1, 0],
-            [0, 0, 0, 1, 1, 1, 0],
+            [0, 1, 1, 1, 1, 1, 0],
+            [0, 1, 1, 1, 1, 1, 0],
+            [0, 1, 1, 1, 1, 1, 0],
+            [0, 1, 1, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0],
         ]);
-
-        println!("{}", color(&trap));
-        println!("{}", color(&expected_trap));
 
         assert_eq!(trap, expected_trap);
     }
