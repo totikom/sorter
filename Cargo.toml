@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 ndarray = {version = "0.15.6", features = ["rayon"]}
+dbg-pls = {version = "0.3.3",  features = ["pretty", "colors", "derive"]}
 
 [dev-dependencies]
 pretty_assertions = "1.3.0"

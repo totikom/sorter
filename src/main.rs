@@ -1,6 +1,8 @@
+use dbg_pls::{color, pretty, DebugPls, Formatter};
 use ndarray::parallel::prelude::*;
 use ndarray::{Array1, Array2, Zip};
 use std::f64::consts::TAU;
+use std::fmt;
 
 fn main() {
     println!("Hello, world!");
@@ -112,8 +114,6 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
                 if !breaked {
                     pointer = start_index;
                 }
-
-                dbg!(&shifted_line);
 
                 let start_iterator = line
                     .iter()
@@ -383,6 +383,30 @@ impl<const WIDTH: usize, const HEIGHT: usize> TrapParams<WIDTH, HEIGHT> {
     }
 }
 
+impl<const WIDTH: usize, const HEIGHT: usize> DebugPls for Trap<WIDTH, HEIGHT> {
+    fn fmt(&self, f: Formatter) {
+        f.debug_list()
+            .entries(self.0.iter().map(|line| {
+                line.iter()
+                    .map(|&is_filled| if is_filled { 1 } else { 0 })
+                    .collect::<Vec<u8>>()
+            }))
+            .finish()
+    }
+}
+
+impl<const WIDTH: usize, const HEIGHT: usize> DebugPls for ShiftedTrap<WIDTH, HEIGHT> {
+    fn fmt(&self, f: Formatter) {
+        f.debug_list()
+            .entries(self.array.iter().map(|line| {
+                line.iter()
+                    .map(|&is_filled| if is_filled { 1 } else { 0 })
+                    .collect::<Vec<u8>>()
+            }))
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -504,10 +528,9 @@ mod tests {
             [0, 0, 0, 1, 1, 1, 0],
         ]);
 
-        for row in trap.to_nums() {
-            println!("{:?}", row);
-        }
-        todo!();
-        //assert_eq!(trap.to_nums(), expected_trap.to_nums());
+        println!("{}", color(&trap));
+        println!("{}", color(&expected_trap));
+
+        assert_eq!(trap, expected_trap);
     }
 }
