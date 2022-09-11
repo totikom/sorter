@@ -44,7 +44,7 @@ struct VerticalMove {
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
-    fn shift(self) -> (Vec<HorizontalMove>, ShiftedTrap<WIDTH, HEIGHT>) {
+    fn shift(&mut self) -> (Vec<HorizontalMove>, ShiftedTrap<WIDTH, HEIGHT>) {
         let mut shifted_trap = [[false; WIDTH]; HEIGHT];
 
         let filled_trap_count = self.0.iter().fold(0, |acc, line| {
@@ -141,6 +141,10 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
             target_size,
         };
 
+        let new_trap = [[false; WIDTH]; HEIGHT];
+
+        std::mem::replace(&mut self.0, new_trap);
+
         (moves, shifted_trap)
     }
 
@@ -184,9 +188,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize> ShiftedTrap<WIDTH, HEIGHT> {
-    fn merge(self) -> (Vec<VerticalMove>, Trap<WIDTH, HEIGHT>) {
-        let mut trap = [[false; WIDTH]; HEIGHT];
-
+    fn merge(self, trap: &mut Trap<WIDTH, HEIGHT>) -> Vec<VerticalMove> {
         let moves = (0..WIDTH)
             .into_iter()
             .map(|j| {
@@ -206,7 +208,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> ShiftedTrap<WIDTH, HEIGHT> {
 
                 for i in start..end {
                     end_iterator.push(i);
-                    trap[i][j] = true;
+                    trap.0[i][j] = true;
                 }
                 let line_moves = start_iterator
                     .into_iter()
@@ -220,7 +222,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> ShiftedTrap<WIDTH, HEIGHT> {
             })
             .collect();
 
-        (moves, Trap(trap))
+        moves
     }
 
     #[cfg(test)]
@@ -380,6 +382,10 @@ impl<const WIDTH: usize, const HEIGHT: usize> TrapParams<WIDTH, HEIGHT> {
             y_signal_q,
         }
     }
+
+    pub fn generate_sorting_signal(&self, trap: &mut Trap<WIDTH, HEIGHT>) -> Vec<Signal> {
+        todo!();
+    }
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize> DebugPls for Trap<WIDTH, HEIGHT> {
@@ -413,9 +419,9 @@ mod tests {
 
     #[test]
     fn one_atom() {
-        let trap = Trap([[true, false, false, false]]);
+        let mut trap = Trap([[true, false, false, false]]);
 
-        let (_, shifted_trap) = Trap::shift(trap);
+        let (_, shifted_trap) = Trap::shift(&mut trap);
 
         let expected_trap = Trap([[false, true, false, false]]);
 
@@ -424,9 +430,9 @@ mod tests {
 
     #[test]
     fn a_few_atoms() {
-        let trap = Trap([[true, false, false, false, true, false, true, true]]);
+        let mut trap = Trap([[true, false, false, false, true, false, true, true]]);
 
-        let (_, shifted_trap) = Trap::shift(trap);
+        let (_, shifted_trap) = Trap::shift(&mut trap);
 
         let expected_trap = Trap([[false, false, false, true, true, true, true, false]]);
 
@@ -435,7 +441,7 @@ mod tests {
 
     #[test]
     fn big_array_shift() {
-        let trap = Trap::from_nums(&[
+        let mut trap = Trap::from_nums(&[
             [0, 0, 0, 1],
             [0, 0, 1, 0],
             [0, 0, 0, 0],
@@ -443,7 +449,7 @@ mod tests {
             [0, 0, 0, 1],
         ]);
 
-        let (_, shifted_trap) = Trap::shift(trap);
+        let (_, shifted_trap) = Trap::shift(&mut trap);
 
         let expected_trap = Trap::from_nums(&[
             [0, 1, 0, 0],
@@ -458,7 +464,7 @@ mod tests {
 
     #[test]
     fn big_array() {
-        let trap = Trap::from_nums(&[
+        let mut trap = Trap::from_nums(&[
             [0, 0, 0, 1],
             [0, 0, 1, 0],
             [0, 0, 0, 0],
@@ -466,7 +472,7 @@ mod tests {
             [0, 0, 0, 1],
         ]);
 
-        let trap = ShiftedTrap::merge(Trap::shift(trap).1).1;
+        ShiftedTrap::merge(Trap::shift(&mut trap).1, &mut trap);
 
         let expected_trap = Trap::from_nums(&[
             [0, 0, 0, 0],
@@ -481,7 +487,7 @@ mod tests {
 
     #[test]
     fn big_array2() {
-        let trap = Trap::from_nums(&[
+        let mut trap = Trap::from_nums(&[
             [0, 0, 0, 1],
             [0, 0, 1, 0],
             [0, 0, 0, 0],
@@ -489,7 +495,7 @@ mod tests {
             [0, 0, 0, 0],
         ]);
 
-        let trap = ShiftedTrap::merge(Trap::shift(trap).1).1;
+        ShiftedTrap::merge(Trap::shift(&mut trap).1, &mut trap);
 
         let expected_trap = Trap::from_nums(&[
             [0, 0, 0, 0],
@@ -503,7 +509,7 @@ mod tests {
     }
     #[test]
     fn huge_array() {
-        let trap = Trap::from_nums(&[
+        let mut trap = Trap::from_nums(&[
             [0, 0, 0, 1, 0, 0, 0],
             [1, 0, 0, 0, 0, 0, 1],
             [0, 1, 0, 1, 0, 0, 1],
@@ -514,7 +520,7 @@ mod tests {
             [1, 0, 0, 1, 0, 0, 1],
         ]);
 
-        let trap = ShiftedTrap::merge(Trap::shift(trap).1).1;
+        ShiftedTrap::merge(Trap::shift(&mut trap).1, &mut trap);
 
         let expected_trap = Trap::from_nums(&[
             [0, 0, 0, 0, 0, 0, 0],
