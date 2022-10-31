@@ -1,6 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use rand::Rng;
-use sorter::{ShiftedTrap, Trap, TrapParams};
+use sorter::{ShiftedTrap, Trap};
 
 fn fill_trap<R: Rng + ?Sized, const WIDTH: usize, const HEIGHT: usize>(
     rng: &mut R,

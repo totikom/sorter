@@ -1,9 +1,8 @@
-use dbg_pls::{color, pretty, DebugPls, Formatter};
+use dbg_pls::{DebugPls, Formatter};
 use ndarray::parallel::prelude::*;
-use ndarray::{Array1, Array2, Zip};
+use ndarray::{Array1, Zip};
 use rayon::iter::ParallelExtend;
 use std::f64::consts::TAU;
-use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct TrapParams<const WIDTH: usize, const HEIGHT: usize> {
@@ -54,81 +53,79 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
 
         let mut pointer = start_index;
 
-        let moves = self
-            .0
-            .iter()
-            .zip(shifted_trap.iter_mut())
-            .enumerate()
-            .map(|(i, (line, shifted_line))| {
-                let mut sum = line.iter().fold(0, |acc, x| if *x { acc + 1 } else { acc });
+        let moves =
+            self.0
+                .iter()
+                .zip(shifted_trap.iter_mut())
+                .enumerate()
+                .map(|(i, (line, shifted_line))| {
+                    let mut sum = line.iter().fold(0, |acc, x| if *x { acc + 1 } else { acc });
 
-                let mut breaked = false;
-                for j in pointer..start_index + target_size {
-                    if sum > 0 {
-                        shifted_line[j] = true;
-                        sum -= 1;
-                    } else {
-                        pointer = j;
-                        breaked = true;
-                        break;
-                    }
-                }
-
-                if sum > 0 {
-                    for j in start_index..pointer {
+                    let mut breaked = false;
+                    for j in pointer..start_index + target_size {
                         if sum > 0 {
                             shifted_line[j] = true;
                             sum -= 1;
                         } else {
                             pointer = j;
+                            breaked = true;
                             break;
                         }
                     }
 
                     if sum > 0 {
-                        for j in start_index + target_size..WIDTH {
+                        for j in start_index..pointer {
                             if sum > 0 {
                                 shifted_line[j] = true;
                                 sum -= 1;
                             } else {
+                                pointer = j;
                                 break;
                             }
                         }
-                    }
 
-                    if sum > 0 {
-                        for j in (0..start_index).rev() {
-                            if sum > 0 {
-                                shifted_line[j] = true;
-                                sum -= 1;
-                            } else {
-                                break;
+                        if sum > 0 {
+                            for j in start_index + target_size..WIDTH {
+                                if sum > 0 {
+                                    shifted_line[j] = true;
+                                    sum -= 1;
+                                } else {
+                                    break;
+                                }
                             }
                         }
+
+                        if sum > 0 {
+                            for j in (0..start_index).rev() {
+                                if sum > 0 {
+                                    shifted_line[j] = true;
+                                    sum -= 1;
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                    } else if !breaked {
+                        pointer = start_index;
                     }
-                } else if !breaked {
-                    pointer = start_index;
-                }
 
-                let start_iterator = line
-                    .iter()
-                    .enumerate()
-                    .map(|(i, is_full)| if *is_full { Some(i) } else { None })
-                    .flatten();
-                let end_iterator = shifted_line
-                    .iter()
-                    .enumerate()
-                    .map(|(i, is_full)| if *is_full { Some(i) } else { None })
-                    .flatten();
+                    let start_iterator =
+                        line.iter()
+                            .enumerate()
+                            .filter_map(|(i, is_full)| if *is_full { Some(i) } else { None });
+                    let end_iterator = shifted_line
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, is_full)| if *is_full { Some(i) } else { None });
 
-                let line_moves = start_iterator.zip(end_iterator).collect();
+                    let line_moves = start_iterator.zip(end_iterator).collect();
 
-                HorizontalMove {
-                    line_index: i,
-                    moves: line_moves,
-                }
-            })
-            .collect();
+                    HorizontalMove {
+                        line_index: i,
+                        moves: line_moves,
+                    }
+                })
+                .collect();
 
         let shifted_trap = ShiftedTrap {
             array: shifted_trap,
@@ -189,7 +186,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
 
 impl<const WIDTH: usize, const HEIGHT: usize> ShiftedTrap<WIDTH, HEIGHT> {
     pub fn merge(self, trap: &mut Trap<WIDTH, HEIGHT>) -> Vec<VerticalMove> {
-        let moves = (0..WIDTH)
+        (0..WIDTH)
             .into_iter()
             .map(|j| {
                 let mut sum = 0;
@@ -220,9 +217,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> ShiftedTrap<WIDTH, HEIGHT> {
                     moves: line_moves,
                 }
             })
-            .collect();
-
-        moves
+            .collect()
     }
 
     #[cfg(test)]
@@ -231,6 +226,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> ShiftedTrap<WIDTH, HEIGHT> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct Signal {
     x_signal_i: Array1<f64>,
     x_signal_q: Array1<f64>,
