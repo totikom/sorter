@@ -5,12 +5,8 @@ use rayon::iter::ParallelExtend;
 use std::f64::consts::TAU;
 use std::fmt;
 
-fn main() {
-    println!("Hello, world!");
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-struct TrapParams<const WIDTH: usize, const HEIGHT: usize> {
+pub struct TrapParams<const WIDTH: usize, const HEIGHT: usize> {
     x_frequencies: [f64; WIDTH],     // in Hz
     y_frequencies: [f64; HEIGHT],    // in Hz
     turn_on_time: f64,               // is seconds, time to turn on the laser
@@ -22,10 +18,10 @@ struct TrapParams<const WIDTH: usize, const HEIGHT: usize> {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct Trap<const WIDTH: usize, const HEIGHT: usize>([[bool; WIDTH]; HEIGHT]);
+pub struct Trap<const WIDTH: usize, const HEIGHT: usize>([[bool; WIDTH]; HEIGHT]);
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct ShiftedTrap<const WIDTH: usize, const HEIGHT: usize> {
+pub struct ShiftedTrap<const WIDTH: usize, const HEIGHT: usize> {
     array: [[bool; WIDTH]; HEIGHT],
     filled_trap_count: usize,
     target_size: usize,
@@ -33,19 +29,19 @@ struct ShiftedTrap<const WIDTH: usize, const HEIGHT: usize> {
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct HorizontalMove {
+pub struct HorizontalMove {
     line_index: usize,
     moves: Vec<(usize, usize)>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct VerticalMove {
+pub struct VerticalMove {
     line_index: usize,
     moves: Vec<(usize, usize)>,
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
-    fn shift(&mut self) -> (Vec<HorizontalMove>, ShiftedTrap<WIDTH, HEIGHT>) {
+    pub fn shift(&mut self) -> (Vec<HorizontalMove>, ShiftedTrap<WIDTH, HEIGHT>) {
         let mut shifted_trap = [[false; WIDTH]; HEIGHT];
 
         let filled_trap_count = self.0.iter().fold(0, |acc, line| {
@@ -85,7 +81,6 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
                             sum -= 1;
                         } else {
                             pointer = j;
-                            breaked = true;
                             break;
                         }
                     }
@@ -149,7 +144,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
         (moves, shifted_trap)
     }
 
-    fn from_nums(array: &[[u8; WIDTH]; HEIGHT]) -> Self {
+    pub fn from_nums(array: &[[u8; WIDTH]; HEIGHT]) -> Self {
         let mut new_array = [[false; WIDTH]; HEIGHT];
         for (i, row) in new_array.iter_mut().enumerate() {
             for (j, val) in row.iter_mut().enumerate() {
@@ -160,6 +155,10 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
         }
 
         Self(new_array)
+    }
+
+    pub fn from_bools(array: [[bool; WIDTH]; HEIGHT]) -> Self {
+        Self(array)
     }
 
     fn to_nums(&self) -> [[u8; WIDTH]; HEIGHT] {
@@ -189,7 +188,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
 }
 
 impl<const WIDTH: usize, const HEIGHT: usize> ShiftedTrap<WIDTH, HEIGHT> {
-    fn merge(self, trap: &mut Trap<WIDTH, HEIGHT>) -> Vec<VerticalMove> {
+    pub fn merge(self, trap: &mut Trap<WIDTH, HEIGHT>) -> Vec<VerticalMove> {
         let moves = (0..WIDTH)
             .into_iter()
             .map(|j| {
@@ -232,7 +231,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> ShiftedTrap<WIDTH, HEIGHT> {
     }
 }
 
-struct Signal {
+pub struct Signal {
     x_signal_i: Array1<f64>,
     x_signal_q: Array1<f64>,
     y_signal_i: Array1<f64>,
