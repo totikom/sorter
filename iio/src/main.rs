@@ -17,7 +17,7 @@ use industrial_io as iio;
 use std::process;
 
 const URL: &str = "172.16.1.246";
-const DEV_NAME: &str = "ad7291";
+const DEV_NAME: &str = "ad9361-phy";
 fn main() {
     let ctx =
         iio::Context::with_backend(iio::Backend::Network(URL)).expect("Failed to connect to board");
