@@ -35,4 +35,9 @@ fn main() {
             channel.channel_type()
         );
     }
+
+    println!("Attributes:");
+    for (attr, val) in dev.attr_read_all().unwrap() {
+        println!("{}: {}", attr, val);
+    }
 }
