@@ -18,21 +18,37 @@ use std::process;
 
 const URL: &str = "172.16.1.246";
 const DEV_NAME: &str = "ad9361-phy";
+const DEV_STREAM_TX_NAME: &str = "cf-ad9361-dds-core-lpc";
+const DEV_STREAM_RX_NAME: &str = "cf-ad9361-lpc";
+
 fn main() {
     let ctx =
         iio::Context::with_backend(iio::Backend::Network(URL)).expect("Failed to connect to board");
 
-    let dev = ctx.find_device(DEV_NAME).expect("No such device");
+    let devices = vec![DEV_NAME, DEV_STREAM_TX_NAME, DEV_STREAM_RX_NAME];
+    for name in devices {
+        let dev = ctx.find_device(name).expect("No such device");
 
-    print!("  {} ", dev.id().unwrap_or_default());
-    print!("[{}]", dev.name().unwrap_or_default());
-    println!(": {} channel(s)", dev.num_channels());
-    for channel in dev.channels() {
         println!(
-            "id: {}, is_output: {}, type: {:?}",
-            channel.id().unwrap_or_default(),
-            channel.is_output(),
-            channel.channel_type()
+            "{} [{}]: {} channel(s)",
+            dev.id().unwrap_or_default(),
+            dev.name().unwrap_or_default(),
+            dev.num_channels(),
         );
+        for channel in dev.channels() {
+            println!(
+                "\tid: {}, is_output: {}, type: {:?}",
+                channel.id().unwrap_or_default(),
+                channel.is_output(),
+                channel.channel_type()
+            );
+            for (attr, value) in channel.attr_read_all().unwrap() {
+                println!("\t\t{}:\t{}", attr, value);
+            }
+        }
+        println!("\tDevice attributes:");
+        for (attr, value) in dev.attr_read_all().unwrap() {
+            println!("\t\t{}:\t{}", attr, value);
+        }
     }
 }
