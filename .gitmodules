@@ -1,0 +1,3 @@
+[submodule "ad9361"]
+	path = ad9361
+	url = ../ad9361-iio.git

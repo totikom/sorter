@@ -1,5 +1,6 @@
 [workspace]
 members = [
+	"ad9361",
 	"iio",
 	"sorter",
 ]
