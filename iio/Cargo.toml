@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 sorter = {path = "../sorter"}
-clap = "2.33.0"
+clap = "4.0.25"
 industrial-io = "0.5.1"

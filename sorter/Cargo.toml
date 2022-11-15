@@ -5,12 +5,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dbg-pls = { version = "0.3.3", features = ["pretty", "colors", "derive"] }
+dbg-pls = { version = "0.3.4", features = ["pretty", "colors", "derive"] }
 ndarray = { version = "0.15.6", features = ["rayon"] }
 rayon = "1.5.3"
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.4"
 pretty_assertions = "1.3.0"
 rand = { version = "0.8.5", features = ["min_const_gen"] }
 
