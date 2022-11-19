@@ -1,19 +1,8 @@
-// industrial-io/examples/riio_detect.rs
-//
-// Simple Rust IIO example to list the devices found in the specified context.
-//
-// Note that, if no context is requested at the command line, this will create
-// a network context if the IIOD_REMOTE environment variable is set, otherwise
-// it will create a local context. See Context::new().
-//
-// Copyright (c) 2018-2019, Frank Pagliughi
-//
-// Licensed under the MIT license:
-//   <LICENSE or http://opensource.org/licenses/MIT>
-// This file may not be copied, modified, or distributed except according
-// to those terms.
-//
+use ad9361_iio as ad9361;
 use industrial_io as iio;
+
+use ad9361::AD9361;
+use ad9361_iio::{RxPortSelect, TxPortSelect};
 use plotters::prelude::*;
 use std::process;
 
@@ -55,18 +44,18 @@ fn main() {
     //}
     //}
 
-    let rx_cfg = StreamCfg {
+    let rx_cfg = RxStreamCfg {
         bandwidth: 2_000_000,
         samplerate: 2_500_000,
         local_oscillator: 2_500_000_000,
-        port: "A_BALANCED".to_string(),
+        port: RxPortSelect::ABalanced,
     };
 
-    let tx_cfg = StreamCfg {
+    let tx_cfg = TxStreamCfg {
         bandwidth: 1_500_000,
         samplerate: 2_500_000,
         local_oscillator: 2_500_000_000,
-        port: "A".to_string(),
+        port: TxPortSelect::A,
     };
 
     println!("* Acquiring AD9361 streaming devices");
@@ -91,7 +80,7 @@ fn main() {
 
     println!("* Configuring AD9361 for streaming");
     phy_chn_rx
-        .attr_write_str("rf_port_select", &rx_cfg.port)
+        .attr_write_str("rf_port_select", &rx_cfg.port.to_str())
         .unwrap();
     phy_chn_rx
         .attr_write_int("rf_bandwidth", rx_cfg.bandwidth)
@@ -101,7 +90,7 @@ fn main() {
         .unwrap();
 
     phy_chn_tx
-        .attr_write_str("rf_port_select", &tx_cfg.port)
+        .attr_write_str("rf_port_select", tx_cfg.port.to_str())
         .unwrap();
     phy_chn_tx
         .attr_write_int("rf_bandwidth", tx_cfg.bandwidth)
@@ -259,8 +248,8 @@ fn plot(
     Ok(())
 }
 
-/// common RX and TX streaming params
-struct StreamCfg {
+/// TX streaming params
+struct TxStreamCfg {
     /// Analog banwidth in Hz
     bandwidth: i64,
     /// Analog banwidth in Hz
@@ -268,5 +257,16 @@ struct StreamCfg {
     /// Local oscillator frequency in Hz
     local_oscillator: i64,
     /// Port name
-    port: String,
+    port: TxPortSelect,
+}
+/// RX streaming params
+struct RxStreamCfg {
+    /// Analog banwidth in Hz
+    bandwidth: i64,
+    /// Analog banwidth in Hz
+    samplerate: i64,
+    /// Local oscillator frequency in Hz
+    local_oscillator: i64,
+    /// Port name
+    port: RxPortSelect,
 }

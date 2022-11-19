@@ -704,6 +704,7 @@ dependencies = [
 name = "iio"
 version = "0.0.0"
 dependencies = [
+ "ad9361-iio",
  "clap 4.0.25",
  "industrial-io",
  "plotters",
