@@ -14,12 +14,14 @@
 // to those terms.
 //
 use industrial_io as iio;
+use plotters::prelude::*;
 use std::process;
 
 const URL: &str = "172.16.1.246";
 const DEV_NAME: &str = "ad9361-phy";
 const DEV_STREAM_TX_NAME: &str = "cf-ad9361-dds-core-lpc";
 const DEV_STREAM_RX_NAME: &str = "cf-ad9361-lpc";
+const OUT_FILE_NAME: &'static str = "target/sample.png";
 
 fn main() {
     println!("* Acquiring IIO context");
@@ -136,42 +138,125 @@ fn main() {
     tx_0i.enable();
     tx_0q.enable();
 
-    dbg!(rx_0i.data_format());
-    dbg!(rx_0q.data_format());
-    dbg!(tx_0i.data_format());
-    dbg!(tx_0q.data_format());
-
     println!("* Creating non-cyclic IIO buffers with 1MiS");
     let mut rx_buf = rx_dev.create_buffer(1012 * 1024, false).unwrap();
-    let mut tx_buf = tx_dev.create_buffer(1012 * 1024, false).unwrap();
+    let tx_buf = tx_dev.create_buffer(1012 * 1024, true).unwrap();
 
-    // RX and TX sample counters
-    let mut nrx = 0;
-    let mut ntx = 0;
+    let single_tone_i: Vec<i16> = vec![10; 1024];
+    let single_tone_q: Vec<i16> = vec![0; 1024];
 
-    let rx_length = 2 * rx_0i.data_format().length() as usize;
-    let tx_length = 2 * tx_0i.data_format().length() as usize;
-    loop {
-        let nbytes_tx = tx_buf.push().unwrap();
-        let nbytes_rx = rx_buf.refill().unwrap();
+    tx_0i.write(&tx_buf, &single_tone_i).unwrap();
+    tx_0q.write(&tx_buf, &single_tone_q).unwrap();
 
-        let rx_i_buf: Vec<i16> = rx_0i.read(&rx_buf).unwrap();
-        let rx_q_buf: Vec<i16> = rx_0q.read(&rx_buf).unwrap();
+    let nbytes_tx = tx_buf.push().unwrap();
 
-        // Example: swap I and Q components
+    println!("Bytes pushed:{}", nbytes_tx);
 
-        tx_0i.write(&tx_buf, &rx_q_buf).unwrap();
-        tx_0q.write(&tx_buf, &rx_i_buf).unwrap();
+    let nbytes_rx = rx_buf.refill().unwrap();
+    println!("Bytes received:{}", nbytes_rx);
 
-        nrx += nbytes_rx / rx_length;
-        ntx += nbytes_tx / tx_length;
-        println!(
-            "\tRX {:8.2} MSmp, TX {:8.2} MSmp",
-            nrx as f32 / 1e6,
-            ntx as f32 / 1e6
-        );
-    }
+    let rx_i_buf: Vec<i16> = rx_0i.read(&rx_buf).unwrap();
+    let rx_q_buf: Vec<i16> = rx_0q.read(&rx_buf).unwrap();
+
+    plot(&rx_i_buf, &rx_q_buf, rx_cfg.samplerate as usize).unwrap();
+
     println!("Ok!");
+}
+
+fn plot(
+    i_signal: &[i16],
+    q_signal: &[i16],
+    samplerate: usize,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root_area = BitMapBackend::new(OUT_FILE_NAME, (1024, 768)).into_drawing_area();
+
+    root_area.fill(&WHITE)?;
+
+    let root_area = root_area.titled("Received signal", ("sans-serif", 60))?;
+
+    let t = 1.0 / samplerate as f64;
+    let x_axis = (0.0..t * i_signal.len() as f64).step(t);
+
+    let mut cc = ChartBuilder::on(&root_area)
+        .margin(5)
+        .set_all_label_area_size(50)
+        .build_cartesian_2d(
+            0.0f64..t * i_signal.len() as f64 / 50.0,
+            -800.0f64..800.0f64,
+        )?;
+
+    cc.configure_mesh()
+        .x_labels(20)
+        .y_labels(10)
+        //.disable_mesh()
+        .x_label_formatter(&|v| format!("{:.1}", v * 1000.0))
+        .y_label_formatter(&|v| format!("{:.1}", v))
+        .draw()?;
+
+    cc.draw_series(LineSeries::new(
+        x_axis.values().zip(i_signal.iter().map(|&x| f64::from(x))),
+        &RED,
+    ))?
+    .label("I-signal")
+    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+
+    cc.draw_series(LineSeries::new(
+        x_axis.values().zip(q_signal.iter().map(|&x| f64::from(x))),
+        &BLUE,
+    ))?
+    .label("Q-signal")
+    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
+
+    cc.configure_series_labels().border_style(&BLACK).draw()?;
+
+    /*
+    // It's possible to use a existing pointing element
+     cc.draw_series(PointSeries::<_, _, Circle<_>>::new(
+        (-3.0f32..2.1f32).step(1.0).values().map(|x| (x, x.sin())),
+        5,
+        Into::<ShapeStyle>::into(&RGBColor(255,0,0)).filled(),
+    ))?;*/
+
+    // Otherwise you can use a function to construct your pointing element yourself
+    //cc.draw_series(PointSeries::of_element(
+    //(-3.0f32..2.1f32).step(1.0).values().map(|x| (x, x.sin())),
+    //5,
+    //ShapeStyle::from(&RED).filled(),
+    //&|coord, size, style| {
+    //EmptyElement::at(coord)
+    //+ Circle::new((0, 0), size, style)
+    //+ Text::new(format!("{:?}", coord), (0, 15), ("sans-serif", 15))
+    //},
+    //))?;
+
+    //let drawing_areas = lower.split_evenly((1, 2));
+
+    //for (drawing_area, idx) in drawing_areas.iter().zip(1..) {
+    //let mut cc = ChartBuilder::on(&drawing_area)
+    //.x_label_area_size(30)
+    //.y_label_area_size(30)
+    //.margin_right(20)
+    //.caption(format!("y = x^{}", 1 + 2 * idx), ("sans-serif", 40))
+    //.build_cartesian_2d(-1f32..1f32, -1f32..1f32)?;
+    //cc.configure_mesh()
+    //.x_labels(5)
+    //.y_labels(3)
+    //.max_light_lines(4)
+    //.draw()?;
+
+    //cc.draw_series(LineSeries::new(
+    //(-1f32..1f32)
+    //.step(0.01)
+    //.values()
+    //.map(|x| (x, x.powf(idx as f32 * 2.0 + 1.0))),
+    //&BLUE,
+    //))?;
+    //}
+
+    // To avoid the IO failure being ignored silently, we manually call the present function
+    root_area.present().expect("Unable to write result to file, please make sure 'plotters-doc-data' dir exists under current dir");
+    println!("Result has been saved to {}", OUT_FILE_NAME);
+    Ok(())
 }
 
 /// common RX and TX streaming params
