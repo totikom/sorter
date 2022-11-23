@@ -1,48 +1,25 @@
 use ad9361_iio as ad9361;
 use industrial_io as iio;
 
-use ad9361::AD9361;
+use ad9361::{Signal, AD9361};
 use ad9361_iio::{RxPortSelect, TxPortSelect};
 use plotters::prelude::*;
 use std::process;
 
 const URL: &str = "172.16.1.246";
-const DEV_NAME: &str = "ad9361-phy";
-const DEV_STREAM_TX_NAME: &str = "cf-ad9361-dds-core-lpc";
-const DEV_STREAM_RX_NAME: &str = "cf-ad9361-lpc";
-const OUT_FILE_NAME: &'static str = "target/sample.png";
+const OUT_FILE_NAME_0: &'static str = "target/sample_0.png";
+const OUT_FILE_NAME_1: &'static str = "target/sample_1.png";
 
 fn main() {
     println!("* Acquiring IIO context");
     let ctx =
         iio::Context::with_backend(iio::Backend::Network(URL)).expect("Failed to connect to board");
 
-    //let devices = vec![DEV_NAME, DEV_STREAM_TX_NAME, DEV_STREAM_RX_NAME];
-    //for name in devices {
-    //let dev = ctx.find_device(name).expect("No such device");
+    println!("* Acquiring AD9361");
+    let mut ad = AD9361::from_ctx(&ctx).expect("Failed to acquire AD9361");
 
-    //println!(
-    //"{} [{}]: {} channel(s)",
-    //dev.id().unwrap_or_default(),
-    //dev.name().unwrap_or_default(),
-    //dev.num_channels(),
-    //);
-    //for channel in dev.channels() {
-    //println!(
-    //"\tid: {}, is_output: {}, type: {:?}",
-    //channel.id().unwrap_or_default(),
-    //channel.is_output(),
-    //channel.channel_type()
-    //);
-    //for (attr, value) in channel.attr_read_all().unwrap() {
-    //println!("\t\t{}:\t{}", attr, value);
-    //}
-    //}
-    //println!("\tDevice attributes:");
-    //for (attr, value) in dev.attr_read_all().unwrap() {
-    //println!("\t\t{}:\t{}", attr, value);
-    //}
-    //}
+    let mut rx = ad.rx.borrow_mut();
+    let mut tx = ad.tx.borrow_mut();
 
     let rx_cfg = RxStreamCfg {
         bandwidth: 2_000_000,
@@ -58,106 +35,115 @@ fn main() {
         port: TxPortSelect::A,
     };
 
-    println!("* Acquiring AD9361 streaming devices");
-    let phy_dev = ctx.find_device(DEV_NAME).expect("No phy device");
-    let tx_dev = ctx.find_device(DEV_STREAM_TX_NAME).expect("No TX device");
-    let rx_dev = ctx.find_device(DEV_STREAM_RX_NAME).expect("No RX device");
+    println!("* Configuring local oscillators");
+    rx.set_lo(rx_cfg.local_oscillator).unwrap();
+    tx.set_lo(tx_cfg.local_oscillator).unwrap();
 
-    println!("* Acquiring AD9361 channels");
-    let phy_chn_rx = phy_dev
-        .find_channel("voltage0", false)
-        .expect("No voltage0 input channel");
-    let phy_chn_tx = phy_dev
-        .find_channel("voltage0", true)
-        .expect("No voltage0 input channel");
+    println!("* Configuring receiver channel 0");
+    rx.set_rf_bandwidth(0, rx_cfg.bandwidth).unwrap();
+    rx.set_sampling_frequency(0, rx_cfg.samplerate).unwrap();
+    rx.set_port(0, RxPortSelect::BBalanced).unwrap();
 
-    let phy_lo_chn_rx = phy_dev
-        .find_channel("altvoltage0", true)
-        .expect("No altvoltage0 input channel");
-    let phy_lo_chn_tx = phy_dev
-        .find_channel("altvoltage1", true)
-        .expect("No altvoltage1 input channel");
+    println!("* Configuring receiver channel 1");
+    rx.set_rf_bandwidth(1, rx_cfg.bandwidth).unwrap();
+    rx.set_sampling_frequency(1, rx_cfg.samplerate).unwrap();
+    rx.set_port(1, RxPortSelect::ABalanced).unwrap();
 
-    println!("* Configuring AD9361 for streaming");
-    phy_chn_rx
-        .attr_write_str("rf_port_select", &rx_cfg.port.to_str())
-        .unwrap();
-    phy_chn_rx
-        .attr_write_int("rf_bandwidth", rx_cfg.bandwidth)
-        .unwrap();
-    phy_chn_rx
-        .attr_write_int("sampling_frequency", rx_cfg.samplerate)
-        .unwrap();
+    println!("* Configuring transmitter channel 0");
+    tx.set_rf_bandwidth(0, tx_cfg.bandwidth).unwrap();
+    tx.set_sampling_frequency(0, tx_cfg.samplerate).unwrap();
+    tx.set_port(0, TxPortSelect::A).unwrap();
 
-    phy_chn_tx
-        .attr_write_str("rf_port_select", tx_cfg.port.to_str())
-        .unwrap();
-    phy_chn_tx
-        .attr_write_int("rf_bandwidth", tx_cfg.bandwidth)
-        .unwrap();
-    phy_chn_tx
-        .attr_write_int("sampling_frequency", tx_cfg.samplerate)
-        .unwrap();
+    println!("* Configuring transmitter channel 1");
+    tx.set_rf_bandwidth(1, tx_cfg.bandwidth).unwrap();
+    tx.set_sampling_frequency(1, tx_cfg.samplerate).unwrap();
+    tx.set_port(1, TxPortSelect::A).unwrap();
 
-    phy_lo_chn_rx
-        .attr_write_int("frequency", rx_cfg.local_oscillator)
-        .unwrap();
-    phy_lo_chn_tx
-        .attr_write_int("frequency", tx_cfg.local_oscillator)
-        .unwrap();
+    println!("* Enabling channels");
+    rx.enable(0);
+    rx.enable(1);
+    tx.enable(0);
+    tx.enable(1);
 
-    println!("* Initializing AD9361 for streaming");
-    let rx_0i = rx_dev
-        .find_channel("voltage0", false)
-        .expect("No voltage0 input channel");
-    let rx_0q = rx_dev
-        .find_channel("voltage1", false)
-        .expect("No voltage1 input channel");
+    println!("* Creating non-cyclic IIO buffers");
+    tx.create_buffer(1024 * 16, false).unwrap();
+    rx.create_buffer(1024 * 16, false).unwrap();
 
-    let tx_0i = tx_dev
-        .find_channel("voltage0", true)
-        .expect("No voltage0 input channel");
-    let tx_0q = tx_dev
-        .find_channel("voltage1", true)
-        .expect("No voltage1 input channel");
+    let signal_0 = Signal {
+        i_channel: vec![0; 512],
+        q_channel: vec![0; 512],
+    };
 
-    println!("* Enabling IIO streaming channels");
-    rx_0i.enable();
-    rx_0q.enable();
-    tx_0i.enable();
-    tx_0q.enable();
+    let signal_1 = Signal {
+        i_channel: vec![20; 512],
+        q_channel: vec![20; 512],
+    };
 
-    println!("* Creating non-cyclic IIO buffers with 1MiS");
-    let mut rx_buf = rx_dev.create_buffer(1012 * 1024, false).unwrap();
-    let tx_buf = tx_dev.create_buffer(1012 * 1024, true).unwrap();
+    let (i_count, q_count) = tx.write(0, &signal_0).unwrap();
+    println!(
+        "* Written {} and {} bytes to buffer of the channel 0",
+        i_count, q_count
+    );
 
-    let single_tone_i: Vec<i16> = vec![10; 1024];
-    let single_tone_q: Vec<i16> = vec![0; 1024];
+    let (i_count, q_count) = tx.write(1, &signal_1).unwrap();
+    println!(
+        "* Written {} and {} bytes to buffer of the channel 1",
+        i_count, q_count
+    );
 
-    tx_0i.write(&tx_buf, &single_tone_i).unwrap();
-    tx_0q.write(&tx_buf, &single_tone_q).unwrap();
+    let bytes_pushed = tx.push_samples_to_device().unwrap();
+    println!("* Send {} bytes to device", bytes_pushed);
 
-    let nbytes_tx = tx_buf.push().unwrap();
+    let bytes_pooled = rx.pool_samples_to_buff().unwrap();
+    println!("* Received {} bytes from device", bytes_pooled);
 
-    println!("Bytes pushed:{}", nbytes_tx);
+    let signal_received_0 = rx.read(0).unwrap();
+    let signal_received_1 = rx.read(1).unwrap();
 
-    let nbytes_rx = rx_buf.refill().unwrap();
-    println!("Bytes received:{}", nbytes_rx);
+    println!("* Plotting graphs");
+    plot(
+        &signal_received_0,
+        rx_cfg.samplerate as usize,
+        OUT_FILE_NAME_0,
+    )
+    .unwrap();
 
-    let rx_i_buf: Vec<i16> = rx_0i.read(&rx_buf).unwrap();
-    let rx_q_buf: Vec<i16> = rx_0q.read(&rx_buf).unwrap();
+    plot(
+        &signal_received_1,
+        rx_cfg.samplerate as usize,
+        OUT_FILE_NAME_1,
+    )
+    .unwrap();
 
-    plot(&rx_i_buf, &rx_q_buf, rx_cfg.samplerate as usize).unwrap();
+    println!("Cleaning up");
+    rx.destroy_buffer();
+    tx.destroy_buffer();
+
+    rx.disable(0);
+    rx.disable(1);
+    tx.disable(0);
+    tx.disable(1);
 
     println!("Ok!");
 }
 
 fn plot(
-    i_signal: &[i16],
-    q_signal: &[i16],
+    signal: &Signal,
     samplerate: usize,
+    filename: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let root_area = BitMapBackend::new(OUT_FILE_NAME, (1024, 768)).into_drawing_area();
+    let root_area = BitMapBackend::new(filename, (1024, 768)).into_drawing_area();
+
+    let i_signal = &signal.i_channel;
+    let q_signal = &signal.q_channel;
+
+    let min_i = *i_signal.iter().min().unwrap();
+    let min_q = *q_signal.iter().min().unwrap();
+    let min = std::cmp::min(min_i, min_q);
+
+    let max_i = *i_signal.iter().max().unwrap();
+    let max_q = *q_signal.iter().max().unwrap();
+    let max = std::cmp::max(max_i, max_q);
 
     root_area.fill(&WHITE)?;
 
@@ -171,7 +157,7 @@ fn plot(
         .set_all_label_area_size(50)
         .build_cartesian_2d(
             0.0f64..t * i_signal.len() as f64 / 50.0,
-            -800.0f64..800.0f64,
+            min as f64..max as f64,
         )?;
 
     cc.configure_mesh()
@@ -244,7 +230,7 @@ fn plot(
 
     // To avoid the IO failure being ignored silently, we manually call the present function
     root_area.present().expect("Unable to write result to file, please make sure 'plotters-doc-data' dir exists under current dir");
-    println!("Result has been saved to {}", OUT_FILE_NAME);
+    println!("Result has been saved to {}", filename);
     Ok(())
 }
 
