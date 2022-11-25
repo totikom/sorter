@@ -141,6 +141,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
         (moves, shifted_trap)
     }
 
+    #[must_use]
     pub fn from_nums(array: &[[u8; WIDTH]; HEIGHT]) -> Self {
         let mut new_array = [[false; WIDTH]; HEIGHT];
         for (i, row) in new_array.iter_mut().enumerate() {
@@ -154,6 +155,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
         Self(new_array)
     }
 
+    #[must_use]
     pub fn from_bools(array: [[bool; WIDTH]; HEIGHT]) -> Self {
         Self(array)
     }

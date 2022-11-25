@@ -4,11 +4,10 @@ use industrial_io as iio;
 use ad9361::{Signal, AD9361};
 use ad9361_iio::{RxPortSelect, TxPortSelect};
 use plotters::prelude::*;
-use std::process;
 
 const URL: &str = "172.16.1.246";
-const OUT_FILE_NAME_0: &'static str = "target/sample_0.png";
-const OUT_FILE_NAME_1: &'static str = "target/sample_1.png";
+const OUT_FILE_NAME_0: &str = "target/sample_0.png";
+const OUT_FILE_NAME_1: &str = "target/sample_1.png";
 
 fn main() {
     println!("* Acquiring IIO context");
@@ -16,7 +15,7 @@ fn main() {
         iio::Context::with_backend(iio::Backend::Network(URL)).expect("Failed to connect to board");
 
     println!("* Acquiring AD9361");
-    let mut ad = AD9361::from_ctx(&ctx).expect("Failed to acquire AD9361");
+    let ad = AD9361::from_ctx(&ctx).expect("Failed to acquire AD9361");
 
     let mut rx = ad.rx.borrow_mut();
     let mut tx = ad.tx.borrow_mut();
@@ -157,7 +156,7 @@ fn plot(
         .set_all_label_area_size(50)
         .build_cartesian_2d(
             0.0f64..t * i_signal.len() as f64 / 50.0,
-            min as f64..max as f64,
+            f64::from(min)..f64::from(max),
         )?;
 
     cc.configure_mesh()
@@ -170,19 +169,19 @@ fn plot(
 
     cc.draw_series(LineSeries::new(
         x_axis.values().zip(i_signal.iter().map(|&x| f64::from(x))),
-        &RED,
+        RED,
     ))?
     .label("I-signal")
-    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], RED));
 
     cc.draw_series(LineSeries::new(
         x_axis.values().zip(q_signal.iter().map(|&x| f64::from(x))),
-        &BLUE,
+        BLUE,
     ))?
     .label("Q-signal")
-    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
+    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], BLUE));
 
-    cc.configure_series_labels().border_style(&BLACK).draw()?;
+    cc.configure_series_labels().border_style(BLACK).draw()?;
 
     /*
     // It's possible to use a existing pointing element
