@@ -4,6 +4,7 @@ use industrial_io as iio;
 use ad9361::{Signal, AD9361};
 use ad9361_iio::{RxPortSelect, TxPortSelect};
 use plotters::prelude::*;
+use std::f64::consts::{FRAC_PI_2, TAU};
 
 const URL: &str = "172.16.1.246";
 const OUT_FILE_NAME_0: &str = "target/sample_0.png";
@@ -67,15 +68,30 @@ fn main() {
     println!("* Creating non-cyclic IIO buffers");
     tx.create_buffer(1024 * 16, false).unwrap();
     rx.create_buffer(1024 * 16, false).unwrap();
+    let params_sin = SinParams {
+        amplitude: 1000.0,
+        frequency: 100_000.0,
+        phase: 0.0,
+        len: 8192,
+        samplerate: tx_cfg.samplerate as usize,
+    };
+
+    let params_cos = SinParams {
+        amplitude: 1.0,
+        frequency: 100_000.0,
+        phase: FRAC_PI_2,
+        len: 8192,
+        samplerate: tx_cfg.samplerate as usize,
+    };
 
     let signal_0 = Signal {
-        i_channel: vec![0; 512],
-        q_channel: vec![0; 512],
+        i_channel: generate_sin(&params_sin),
+        q_channel: generate_sin(&params_cos),
     };
 
     let signal_1 = Signal {
-        i_channel: vec![20; 512],
-        q_channel: vec![20; 512],
+        i_channel: vec![00; 1024],
+        q_channel: generate_sin(&params_cos),
     };
 
     let (i_count, q_count) = tx.write(0, &signal_0).unwrap();
@@ -104,6 +120,7 @@ fn main() {
         &signal_received_0,
         rx_cfg.samplerate as usize,
         OUT_FILE_NAME_0,
+        100.0,
     )
     .unwrap();
 
@@ -111,6 +128,7 @@ fn main() {
         &signal_received_1,
         rx_cfg.samplerate as usize,
         OUT_FILE_NAME_1,
+        1.0,
     )
     .unwrap();
 
@@ -130,6 +148,7 @@ fn plot(
     signal: &Signal,
     samplerate: usize,
     filename: &str,
+    scale: f64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root_area = BitMapBackend::new(filename, (1024, 768)).into_drawing_area();
 
@@ -155,7 +174,7 @@ fn plot(
         .margin(5)
         .set_all_label_area_size(50)
         .build_cartesian_2d(
-            0.0f64..t * i_signal.len() as f64 / 50.0,
+            0.0f64..t * i_signal.len() as f64 / scale,
             f64::from(min)..f64::from(max),
         )?;
 
@@ -254,4 +273,21 @@ struct RxStreamCfg {
     local_oscillator: i64,
     /// Port name
     port: RxPortSelect,
+}
+
+#[derive(Debug)]
+struct SinParams {
+    frequency: f64,
+    amplitude: f64,
+    phase: f64,
+    len: usize,
+    samplerate: usize,
+}
+fn generate_sin(params: &SinParams) -> Vec<i16> {
+    (0..params.len)
+        .map(|x| {
+            (((x as f64 / params.samplerate as f64) * TAU * params.frequency + params.phase).sin()
+                * params.amplitude) as i16
+        })
+        .collect()
 }
