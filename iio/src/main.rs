@@ -11,6 +11,7 @@ const URL: &str = "172.16.1.246";
 const OUT_FILE_NAME_0: &str = "target/sample_0.png";
 const OUT_FILE_NAME_1: &str = "target/sample_1.png";
 const SPECTRUM_FILE_NAME_0: &str = "target/spectrum_0.png";
+const SPECTRUM_FILE_NAME_1: &str = "target/spectrum_1.png";
 
 fn main() {
     println!("* Acquiring IIO context");
@@ -65,11 +66,12 @@ fn main() {
     rx.enable(0);
     rx.enable(1);
     tx.enable(0);
-    tx.enable(1);
+    //tx.enable(1);
 
     println!("* Creating non-cyclic IIO buffers");
     tx.create_buffer(1024 * 16, false).unwrap();
-    rx.create_buffer(1024 * 16, false).unwrap();
+    rx.create_buffer(1024 * 16, true).unwrap();
+
     let params_sin = SinParams {
         amplitude: 1000.0,
         frequency: 100_000.0,
@@ -102,11 +104,11 @@ fn main() {
         i_count, q_count
     );
 
-    let (i_count, q_count) = tx.write(1, &signal_1).unwrap();
-    println!(
-        "* Written {} and {} bytes to buffer of the channel 1",
-        i_count, q_count
-    );
+    //let (i_count, q_count) = tx.write(1, &signal_1).unwrap();
+    //println!(
+    //"* Written {} and {} bytes to buffer of the channel 1",
+    //i_count, q_count
+    //);
 
     let bytes_pushed = tx.push_samples_to_device().unwrap();
     println!("* Send {} bytes to device", bytes_pushed);
@@ -134,18 +136,28 @@ fn main() {
     )
     .unwrap();
 
-    println!("* Geneating spectra");
+    println!("* Generating spectra");
     let expected_spectrum = spectrum(&signal_0);
-    let spectrum = spectrum(&signal_received_0);
+    let spectrum_0 = spectrum(&signal_received_0);
+
+    let spectrum_1 = spectrum(&signal_received_1);
 
     println!("* Plotting spectra");
     plot_spectrum(
-        &spectrum,
+        &spectrum_0,
         &expected_spectrum,
         rx_cfg.samplerate as usize,
-        spectrum_FILE_NAME_0,
-        1.0,
-    );
+        SPECTRUM_FILE_NAME_0,
+    )
+    .unwrap();
+
+    plot_spectrum(
+        &spectrum_1,
+        &expected_spectrum,
+        rx_cfg.samplerate as usize,
+        SPECTRUM_FILE_NAME_1,
+    )
+    .unwrap();
 
     println!("* Cleaning up");
     rx.destroy_buffer();
@@ -272,107 +284,77 @@ fn plot_spectrum(
     expected_signal: &Vec<Complex<f32>>,
     samplerate: usize,
     filename: &str,
-    scale: f32,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root_area = BitMapBackend::new(filename, (1024, 768)).into_drawing_area();
 
-    let real: Vec<_> = signal.iter().map(|x| x.re).collect();
-    let imag: Vec<_> = signal.iter().map(|x| x.im).collect();
+    let signal: Vec<_> = signal.iter().map(|x| x.norm().powi(2)).collect();
+    let expected_signal: Vec<_> = expected_signal.iter().map(|x| x.norm().powi(2)).collect();
 
-    let expected_real: Vec<_> = expected_signal.iter().map(|x| x.re).collect();
-    let expected_imag: Vec<_> = expected_signal.iter().map(|x| x.im).collect();
+    let min = signal
+        .iter()
+        .map(|x| *x)
+        .reduce(|x, y| f32::min(x, y))
+        .unwrap();
+    let expected_min = expected_signal
+        .iter()
+        .map(|x| *x)
+        .reduce(|x, y| f32::min(x, y))
+        .unwrap();
+    let min = f32::min(min, expected_min);
 
-    let min_r = real
-        .iter()
-        .map(|x| *x)
-        .reduce(|x, y| f32::min(x, y))
-        .unwrap();
-    let min_i = imag
-        .iter()
-        .map(|x| *x)
-        .reduce(|x, y| f32::min(x, y))
-        .unwrap();
-    let expected_min_r = expected_real
-        .iter()
-        .map(|x| *x)
-        .reduce(|x, y| f32::min(x, y))
-        .unwrap();
-    let expected_min_i = expected_imag
-        .iter()
-        .map(|x| *x)
-        .reduce(|x, y| f32::min(x, y))
-        .unwrap();
-    let min = f32::min(
-        f32::min(min_i, min_r),
-        f32::min(expected_min_i, expected_min_r),
-    );
-
-    let max_r = real
+    let max = signal
         .iter()
         .map(|x| *x)
         .reduce(|x, y| f32::max(x, y))
         .unwrap();
-    let max_i = imag
+    let expected_max = expected_signal
         .iter()
         .map(|x| *x)
         .reduce(|x, y| f32::max(x, y))
         .unwrap();
-    let expected_max_r = expected_real
-        .iter()
-        .map(|x| *x)
-        .reduce(|x, y| f32::max(x, y))
-        .unwrap();
-    let expected_max_i = expected_imag
-        .iter()
-        .map(|x| *x)
-        .reduce(|x, y| f32::max(x, y))
-        .unwrap();
-    let max = f32::max(
-        f32::max(max_i, max_r),
-        f32::max(expected_max_i, expected_max_r),
-    );
+    let max = f32::max(max, expected_max);
 
     root_area.fill(&WHITE)?;
 
     let root_area = root_area.titled("Received signal", ("sans-serif", 60))?;
 
-    let t = 1.0 / samplerate as f32;
-    let x_axis = (0.0..t * real.len() as f32).step(t);
+    let x_axis = fft_freq(signal.len() as isize, 1.0 / samplerate as f32);
+    let (x_min, x_max) = x_axis
+        .iter()
+        .map(|x| *x)
+        .fold((f32::MAX, f32::MIN), |(prev_min, prev_max), y| {
+            (f32::min(prev_min, y), f32::max(prev_max, y))
+        });
 
     let mut cc = ChartBuilder::on(&root_area)
         .margin(5)
         .set_all_label_area_size(50)
-        .build_cartesian_2d(0.0f32..t * real.len() as f32 / scale, min..max)?;
+        .build_cartesian_2d(x_min..x_max, (min..max).log_scale())?;
 
     cc.configure_mesh()
         .x_labels(20)
         .y_labels(10)
         //.disable_mesh()
-        .x_label_formatter(&|v| format!("{:.1}", v * 1000.0))
-        .y_label_formatter(&|v| format!("{:.1}", v))
+        .x_label_formatter(&|v| format!("{:.1e}", v))
+        .y_label_formatter(&|v| format!("{:.1e}", v))
         .draw()?;
 
-    cc.draw_series(LineSeries::new(x_axis.values().zip(real.into_iter()), RED))?
-        .label("Real part")
-        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], RED));
-
-    cc.draw_series(LineSeries::new(x_axis.values().zip(imag.into_iter()), BLUE))?
-        .label("Imaginary part")
-        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], BLUE));
+    cc.draw_series(LineSeries::new(
+        x_axis.iter().zip(signal.iter()).map(|(x, y)| (*x, *y)),
+        RED,
+    ))?
+    .label("Received spectrum")
+    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], RED));
 
     cc.draw_series(LineSeries::new(
-        x_axis.values().zip(expected_real.into_iter()),
-        GREEN,
+        x_axis
+            .iter()
+            .zip(expected_signal.iter())
+            .map(|(x, y)| (*x, *y)),
+        BLUE,
     ))?
-    .label("Expected real part")
-    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], GREEN));
-
-    cc.draw_series(LineSeries::new(
-        x_axis.values().zip(expected_imag.into_iter()),
-        YELLOW,
-    ))?
-    .label("Expected imaginary part")
-    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], YELLOW));
+    .label("Expected spectrum")
+    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], BLUE));
 
     cc.configure_series_labels().border_style(BLACK).draw()?;
 
@@ -380,6 +362,22 @@ fn plot_spectrum(
     root_area.present().expect("Unable to write result to file");
     println!("Result has been saved to {}", filename);
     Ok(())
+}
+
+fn fft_freq(n: isize, d: f32) -> Vec<f32> {
+    if n % 2 == 0 {
+        (0..n / 2)
+            .into_iter()
+            .chain(((-n / 2)..0).into_iter())
+            .map(|x| (x as f32) / (d * n as f32))
+            .collect::<Vec<_>>()
+    } else {
+        (0..=(n - 1) / 2)
+            .into_iter()
+            .chain(((-(n - 1) / 2)..0).into_iter())
+            .map(|x| (x as f32) / (d * n as f32))
+            .collect::<Vec<_>>()
+    }
 }
 
 fn spectrum(signal: &Signal) -> Vec<Complex<f32>> {
