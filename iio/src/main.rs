@@ -4,11 +4,13 @@ use industrial_io as iio;
 use ad9361::{Signal, AD9361};
 use ad9361_iio::{RxPortSelect, TxPortSelect};
 use plotters::prelude::*;
+use rustfft::{num_complex::Complex, FftPlanner};
 use std::f64::consts::{FRAC_PI_2, TAU};
 
 const URL: &str = "172.16.1.246";
 const OUT_FILE_NAME_0: &str = "target/sample_0.png";
 const OUT_FILE_NAME_1: &str = "target/sample_1.png";
+const SPECTRUM_FILE_NAME_0: &str = "target/spectrum_0.png";
 
 fn main() {
     println!("* Acquiring IIO context");
@@ -132,7 +134,20 @@ fn main() {
     )
     .unwrap();
 
-    println!("Cleaning up");
+    println!("* Geneating spectra");
+    let expected_spectrum = spectrum(&signal_0);
+    let spectrum = spectrum(&signal_received_0);
+
+    println!("* Plotting spectra");
+    plot_spectrum(
+        &spectrum,
+        &expected_spectrum,
+        rx_cfg.samplerate as usize,
+        spectrum_FILE_NAME_0,
+        1.0,
+    );
+
+    println!("* Cleaning up");
     rx.destroy_buffer();
     tx.destroy_buffer();
 
@@ -247,9 +262,139 @@ fn plot(
     //}
 
     // To avoid the IO failure being ignored silently, we manually call the present function
-    root_area.present().expect("Unable to write result to file, please make sure 'plotters-doc-data' dir exists under current dir");
+    root_area.present().expect("Unable to write result to file");
     println!("Result has been saved to {}", filename);
     Ok(())
+}
+
+fn plot_spectrum(
+    signal: &Vec<Complex<f32>>,
+    expected_signal: &Vec<Complex<f32>>,
+    samplerate: usize,
+    filename: &str,
+    scale: f32,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let root_area = BitMapBackend::new(filename, (1024, 768)).into_drawing_area();
+
+    let real: Vec<_> = signal.iter().map(|x| x.re).collect();
+    let imag: Vec<_> = signal.iter().map(|x| x.im).collect();
+
+    let expected_real: Vec<_> = expected_signal.iter().map(|x| x.re).collect();
+    let expected_imag: Vec<_> = expected_signal.iter().map(|x| x.im).collect();
+
+    let min_r = real
+        .iter()
+        .map(|x| *x)
+        .reduce(|x, y| f32::min(x, y))
+        .unwrap();
+    let min_i = imag
+        .iter()
+        .map(|x| *x)
+        .reduce(|x, y| f32::min(x, y))
+        .unwrap();
+    let expected_min_r = expected_real
+        .iter()
+        .map(|x| *x)
+        .reduce(|x, y| f32::min(x, y))
+        .unwrap();
+    let expected_min_i = expected_imag
+        .iter()
+        .map(|x| *x)
+        .reduce(|x, y| f32::min(x, y))
+        .unwrap();
+    let min = f32::min(
+        f32::min(min_i, min_r),
+        f32::min(expected_min_i, expected_min_r),
+    );
+
+    let max_r = real
+        .iter()
+        .map(|x| *x)
+        .reduce(|x, y| f32::max(x, y))
+        .unwrap();
+    let max_i = imag
+        .iter()
+        .map(|x| *x)
+        .reduce(|x, y| f32::max(x, y))
+        .unwrap();
+    let expected_max_r = expected_real
+        .iter()
+        .map(|x| *x)
+        .reduce(|x, y| f32::max(x, y))
+        .unwrap();
+    let expected_max_i = expected_imag
+        .iter()
+        .map(|x| *x)
+        .reduce(|x, y| f32::max(x, y))
+        .unwrap();
+    let max = f32::max(
+        f32::max(max_i, max_r),
+        f32::max(expected_max_i, expected_max_r),
+    );
+
+    root_area.fill(&WHITE)?;
+
+    let root_area = root_area.titled("Received signal", ("sans-serif", 60))?;
+
+    let t = 1.0 / samplerate as f32;
+    let x_axis = (0.0..t * real.len() as f32).step(t);
+
+    let mut cc = ChartBuilder::on(&root_area)
+        .margin(5)
+        .set_all_label_area_size(50)
+        .build_cartesian_2d(0.0f32..t * real.len() as f32 / scale, min..max)?;
+
+    cc.configure_mesh()
+        .x_labels(20)
+        .y_labels(10)
+        //.disable_mesh()
+        .x_label_formatter(&|v| format!("{:.1}", v * 1000.0))
+        .y_label_formatter(&|v| format!("{:.1}", v))
+        .draw()?;
+
+    cc.draw_series(LineSeries::new(x_axis.values().zip(real.into_iter()), RED))?
+        .label("Real part")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], RED));
+
+    cc.draw_series(LineSeries::new(x_axis.values().zip(imag.into_iter()), BLUE))?
+        .label("Imaginary part")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], BLUE));
+
+    cc.draw_series(LineSeries::new(
+        x_axis.values().zip(expected_real.into_iter()),
+        GREEN,
+    ))?
+    .label("Expected real part")
+    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], GREEN));
+
+    cc.draw_series(LineSeries::new(
+        x_axis.values().zip(expected_imag.into_iter()),
+        YELLOW,
+    ))?
+    .label("Expected imaginary part")
+    .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], YELLOW));
+
+    cc.configure_series_labels().border_style(BLACK).draw()?;
+
+    // To avoid the IO failure being ignored silently, we manually call the present function
+    root_area.present().expect("Unable to write result to file");
+    println!("Result has been saved to {}", filename);
+    Ok(())
+}
+
+fn spectrum(signal: &Signal) -> Vec<Complex<f32>> {
+    let mut buffer: Vec<_> = signal
+        .i_channel
+        .iter()
+        .zip(signal.q_channel.iter())
+        .map(|(&i, &q)| Complex::new(i as f32, q as f32))
+        .collect();
+
+    let mut planner = FftPlanner::new();
+    let fft = planner.plan_fft_forward(buffer.len());
+
+    fft.process(&mut buffer);
+    buffer
 }
 
 /// TX streaming params
