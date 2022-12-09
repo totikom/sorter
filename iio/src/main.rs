@@ -3,6 +3,7 @@ use industrial_io as iio;
 
 use ad9361::{Signal, AD9361};
 use ad9361_iio::{RxPortSelect, TxPortSelect};
+use log::{debug, error, info, log_enabled, Level};
 use plotters::prelude::*;
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::f64::consts::{FRAC_PI_2, TAU};
@@ -14,75 +15,71 @@ const SPECTRUM_FILE_NAME_0: &str = "target/spectrum_0.png";
 const SPECTRUM_FILE_NAME_1: &str = "target/spectrum_1.png";
 
 fn main() {
-    println!("* Acquiring IIO context");
+    env_logger::init();
+
+    info!("acquiring IIO context");
     let ctx =
         iio::Context::with_backend(iio::Backend::Network(URL)).expect("Failed to connect to board");
 
-    println!("* Acquiring AD9361");
+    info!("acquiring AD9361");
     let ad = AD9361::from_ctx(&ctx).expect("Failed to acquire AD9361");
 
     let mut rx = ad.rx.borrow_mut();
     let mut tx = ad.tx.borrow_mut();
 
     let rx_cfg = RxStreamCfg {
-        bandwidth: 2_000_000,
-        samplerate: 2_500_000,
-        local_oscillator: 2_500_000_000,
+        bandwidth: 50_000_000,
+        samplerate: 62_00_000,
+        local_oscillator: 100_000_000,
         port: RxPortSelect::ABalanced,
     };
 
     let tx_cfg = TxStreamCfg {
-        bandwidth: 1_500_000,
-        samplerate: 2_500_000,
-        local_oscillator: 2_500_000_000,
+        bandwidth: 50_000_000,
+        samplerate: 62_00_000,
+        local_oscillator: 100_000_000,
         port: TxPortSelect::A,
     };
 
-    println!("* Configuring local oscillators");
+    info!("configuring local oscillators");
     rx.set_lo(rx_cfg.local_oscillator).unwrap();
     tx.set_lo(tx_cfg.local_oscillator).unwrap();
 
-    println!("* Configuring receiver channel 0");
+    info!("configuring receiver channel 0");
     rx.set_rf_bandwidth(0, rx_cfg.bandwidth).unwrap();
     rx.set_sampling_frequency(0, rx_cfg.samplerate).unwrap();
     rx.set_port(0, RxPortSelect::BBalanced).unwrap();
 
-    println!("* Configuring receiver channel 1");
+    info!("configuring receiver channel 1");
     rx.set_rf_bandwidth(1, rx_cfg.bandwidth).unwrap();
     rx.set_sampling_frequency(1, rx_cfg.samplerate).unwrap();
     rx.set_port(1, RxPortSelect::ABalanced).unwrap();
 
-    println!("* Configuring transmitter channel 0");
+    info!("configuring transmitter channel 0");
     tx.set_rf_bandwidth(0, tx_cfg.bandwidth).unwrap();
     tx.set_sampling_frequency(0, tx_cfg.samplerate).unwrap();
     tx.set_port(0, TxPortSelect::A).unwrap();
 
-    println!("* Configuring transmitter channel 1");
-    tx.set_rf_bandwidth(1, tx_cfg.bandwidth).unwrap();
-    tx.set_sampling_frequency(1, tx_cfg.samplerate).unwrap();
-    tx.set_port(1, TxPortSelect::A).unwrap();
-
-    println!("* Enabling channels");
+    info!("enabling channels");
     rx.enable(0);
     rx.enable(1);
     tx.enable(0);
-    //tx.enable(1);
 
-    println!("* Creating non-cyclic IIO buffers");
-    tx.create_buffer(1024 * 16, false).unwrap();
-    rx.create_buffer(1024 * 16, true).unwrap();
+    info!("creating non-cyclic IIO buffers");
+    tx.create_buffer(8192, true).unwrap();
+    rx.create_buffer(8192, false).unwrap();
 
     let params_sin = SinParams {
-        amplitude: 1000.0,
-        frequency: 100_000.0,
+        amplitude: 1_000.0,
+        frequency: 10_000.0,
         phase: 0.0,
         len: 8192,
         samplerate: tx_cfg.samplerate as usize,
     };
 
     let params_cos = SinParams {
-        amplitude: 1.0,
-        frequency: 100_000.0,
+        amplitude: 1_000.0,
+        frequency: 10_000.0,
         phase: FRAC_PI_2,
         len: 8192,
         samplerate: tx_cfg.samplerate as usize,
@@ -93,38 +90,28 @@ fn main() {
         q_channel: generate_sin(&params_cos),
     };
 
-    let signal_1 = Signal {
-        i_channel: vec![00; 1024],
-        q_channel: generate_sin(&params_cos),
-    };
 
     let (i_count, q_count) = tx.write(0, &signal_0).unwrap();
-    println!(
-        "* Written {} and {} bytes to buffer of the channel 0",
+    info!(
+        "written {} and {} bytes to buffer of the channel 0",
         i_count, q_count
     );
 
-    //let (i_count, q_count) = tx.write(1, &signal_1).unwrap();
-    //println!(
-    //"* Written {} and {} bytes to buffer of the channel 1",
-    //i_count, q_count
-    //);
-
     let bytes_pushed = tx.push_samples_to_device().unwrap();
-    println!("* Send {} bytes to device", bytes_pushed);
+    info!("send {} bytes to device", bytes_pushed);
 
     let bytes_pooled = rx.pool_samples_to_buff().unwrap();
-    println!("* Received {} bytes from device", bytes_pooled);
+    info!("received {} bytes from device", bytes_pooled);
 
     let signal_received_0 = rx.read(0).unwrap();
     let signal_received_1 = rx.read(1).unwrap();
 
-    println!("* Plotting graphs");
+    info!("plotting graphs");
     plot(
         &signal_received_0,
         rx_cfg.samplerate as usize,
         OUT_FILE_NAME_0,
-        100.0,
+        10.0,
     )
     .unwrap();
 
@@ -132,22 +119,31 @@ fn main() {
         &signal_received_1,
         rx_cfg.samplerate as usize,
         OUT_FILE_NAME_1,
-        1.0,
+        10.0,
     )
     .unwrap();
 
-    println!("* Generating spectra");
+    plot(
+        &signal_0,
+        rx_cfg.samplerate as usize,
+        "target/expected_signal.png",
+        10.0,
+    )
+    .unwrap();
+
+    info!("generating spectra");
     let expected_spectrum = spectrum(&signal_0);
     let spectrum_0 = spectrum(&signal_received_0);
 
     let spectrum_1 = spectrum(&signal_received_1);
 
-    println!("* Plotting spectra");
+    info!("plotting spectra");
     plot_spectrum(
         &spectrum_0,
         &expected_spectrum,
         rx_cfg.samplerate as usize,
         SPECTRUM_FILE_NAME_0,
+        rx_cfg.local_oscillator as f32,
     )
     .unwrap();
 
@@ -156,10 +152,11 @@ fn main() {
         &expected_spectrum,
         rx_cfg.samplerate as usize,
         SPECTRUM_FILE_NAME_1,
+        rx_cfg.local_oscillator as f32,
     )
     .unwrap();
 
-    println!("* Cleaning up");
+    info!("Cleaning up");
     rx.destroy_buffer();
     tx.destroy_buffer();
 
@@ -168,7 +165,7 @@ fn main() {
     tx.disable(0);
     tx.disable(1);
 
-    println!("Ok!");
+    info!("Finished!");
 }
 
 fn plot(
@@ -275,7 +272,7 @@ fn plot(
 
     // To avoid the IO failure being ignored silently, we manually call the present function
     root_area.present().expect("Unable to write result to file");
-    println!("Result has been saved to {}", filename);
+    info!("result has been saved to {}", filename);
     Ok(())
 }
 
@@ -284,6 +281,7 @@ fn plot_spectrum(
     expected_signal: &Vec<Complex<f32>>,
     samplerate: usize,
     filename: &str,
+    lo: f32,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root_area = BitMapBackend::new(filename, (1024, 768)).into_drawing_area();
 
@@ -318,7 +316,7 @@ fn plot_spectrum(
 
     let root_area = root_area.titled("Received signal", ("sans-serif", 60))?;
 
-    let x_axis = fft_freq(signal.len() as isize, 1.0 / samplerate as f32);
+    let x_axis = fft_freq(signal.len() as isize, 1.0 / samplerate as f32, lo);
     let (x_min, x_max) = x_axis
         .iter()
         .map(|x| *x)
@@ -335,7 +333,7 @@ fn plot_spectrum(
         .x_labels(20)
         .y_labels(10)
         //.disable_mesh()
-        .x_label_formatter(&|v| format!("{:.1e}", v))
+        .x_label_formatter(&|v| format!("{:.3e}", v))
         .y_label_formatter(&|v| format!("{:.1e}", v))
         .draw()?;
 
@@ -360,22 +358,22 @@ fn plot_spectrum(
 
     // To avoid the IO failure being ignored silently, we manually call the present function
     root_area.present().expect("Unable to write result to file");
-    println!("Result has been saved to {}", filename);
+    info!("result has been saved to {}", filename);
     Ok(())
 }
 
-fn fft_freq(n: isize, d: f32) -> Vec<f32> {
+fn fft_freq(n: isize, d: f32, lo: f32) -> Vec<f32> {
     if n % 2 == 0 {
         (0..n / 2)
             .into_iter()
             .chain(((-n / 2)..0).into_iter())
-            .map(|x| (x as f32) / (d * n as f32))
+            .map(|x| (x as f32) / (d * n as f32) + lo)
             .collect::<Vec<_>>()
     } else {
         (0..=(n - 1) / 2)
             .into_iter()
             .chain(((-(n - 1) / 2)..0).into_iter())
-            .map(|x| (x as f32) / (d * n as f32))
+            .map(|x| (x as f32) / (d * n as f32) + lo)
             .collect::<Vec<_>>()
     }
 }
