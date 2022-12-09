@@ -3,7 +3,7 @@ use industrial_io as iio;
 
 use ad9361::{Signal, AD9361};
 use ad9361_iio::{RxPortSelect, TxPortSelect};
-use log::{debug, error, info, log_enabled, Level};
+use log::info;
 use plotters::prelude::*;
 use rustfft::{num_complex::Complex, FftPlanner};
 use std::f64::consts::{FRAC_PI_2, TAU};
@@ -29,14 +29,14 @@ fn main() {
 
     let rx_cfg = RxStreamCfg {
         bandwidth: 50_000_000,
-        samplerate: 62_00_000,
+        samplerate: 6_200_000,
         local_oscillator: 100_000_000,
         port: RxPortSelect::ABalanced,
     };
 
     let tx_cfg = TxStreamCfg {
         bandwidth: 50_000_000,
-        samplerate: 62_00_000,
+        samplerate: 6_200_000,
         local_oscillator: 100_000_000,
         port: TxPortSelect::A,
     };
@@ -89,7 +89,6 @@ fn main() {
         i_channel: generate_sin(&params_sin),
         q_channel: generate_sin(&params_cos),
     };
-
 
     let (i_count, q_count) = tx.write(0, &signal_0).unwrap();
     info!(
@@ -288,28 +287,12 @@ fn plot_spectrum(
     let signal: Vec<_> = signal.iter().map(|x| x.norm().powi(2)).collect();
     let expected_signal: Vec<_> = expected_signal.iter().map(|x| x.norm().powi(2)).collect();
 
-    let min = signal
-        .iter()
-        .map(|x| *x)
-        .reduce(|x, y| f32::min(x, y))
-        .unwrap();
-    let expected_min = expected_signal
-        .iter()
-        .map(|x| *x)
-        .reduce(|x, y| f32::min(x, y))
-        .unwrap();
+    let min = signal.iter().copied().reduce(f32::min).unwrap();
+    let expected_min = expected_signal.iter().copied().reduce(f32::min).unwrap();
     let min = f32::min(min, expected_min);
 
-    let max = signal
-        .iter()
-        .map(|x| *x)
-        .reduce(|x, y| f32::max(x, y))
-        .unwrap();
-    let expected_max = expected_signal
-        .iter()
-        .map(|x| *x)
-        .reduce(|x, y| f32::max(x, y))
-        .unwrap();
+    let max = signal.iter().copied().reduce(f32::max).unwrap();
+    let expected_max = expected_signal.iter().copied().reduce(f32::max).unwrap();
     let max = f32::max(max, expected_max);
 
     root_area.fill(&WHITE)?;
@@ -319,7 +302,7 @@ fn plot_spectrum(
     let x_axis = fft_freq(signal.len() as isize, 1.0 / samplerate as f32, lo);
     let (x_min, x_max) = x_axis
         .iter()
-        .map(|x| *x)
+        .copied()
         .fold((f32::MAX, f32::MIN), |(prev_min, prev_max), y| {
             (f32::min(prev_min, y), f32::max(prev_max, y))
         });
@@ -383,7 +366,7 @@ fn spectrum(signal: &Signal) -> Vec<Complex<f32>> {
         .i_channel
         .iter()
         .zip(signal.q_channel.iter())
-        .map(|(&i, &q)| Complex::new(i as f32, q as f32))
+        .map(|(&i, &q)| Complex::new(f32::from(i), f32::from(q)))
         .collect();
 
     let mut planner = FftPlanner::new();
