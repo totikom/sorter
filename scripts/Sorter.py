@@ -557,7 +557,7 @@ plt.show()
 # %%
 print("Values:")
 blacklist = ["gain_table_config", "multichip_sync"]
-channel_blacklist = ["fastlock_recall"]
+channel_blacklist = ["fastlock_recall","samples_pps"]
 for dev in sdr.ctx.devices:
     print(dev.name, "{")
     if dev.name == "ams" or dev.name == "ad7291" or dev.name == None:

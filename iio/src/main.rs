@@ -26,6 +26,11 @@ fn main() {
     let mut rx = ad.rx.borrow_mut();
     let mut tx = ad.tx.borrow_mut();
 
+    dbg!(rx.hardware_gain(0).unwrap());
+    dbg!(rx.hardware_gain(1).unwrap());
+    dbg!(tx.hardware_gain(0).unwrap());
+    dbg!(tx.hardware_gain(1).unwrap());
+
     let rx_cfg = RxStreamCfg {
         bandwidth: 50_000_000,
         samplerate: 6_200_000,
