@@ -1,3 +1,19 @@
+# -*- coding: utf-8 -*-
+# ---
+# jupyter:
+#   jupytext:
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.14.4
+#   kernelspec:
+#     display_name: Python 3 (ipykernel)
+#     language: python
+#     name: python3
+# ---
+
 # %%
 import adi
 import numpy as np
@@ -10,6 +26,7 @@ from pandas import read_csv, DataFrame
 import matplotlib as mpl
 import functools
 from timeit import default_timer as timer
+# %matplotlib inline
 
 # %%
 golden_ratio = (np.sqrt(5) - 1) / 2
@@ -86,6 +103,7 @@ def coord_to_freq(i, direction): # direction = True for X
 #         return x_freqs[i]
 #     else:
 #         return y_freqs[i]
+
 
 # %%
 def atom_signal(start_freq, end_freq):
@@ -223,11 +241,12 @@ def generate_picture_bundle(direction, coord, input_array, output_array, time):
         x_signal = generate_static_signal(coord, not direction)
     return (x_signal, y_signal)
 
+
 # %%
 # Тестирование размера буфера
 transition_time(coord_to_freq(0, True), coord_to_freq(4, True)) * sample_rate
 
-# %%
+# %% tags=[]
 start = 4
 stop = 0
 direction = False
@@ -280,34 +299,6 @@ plt.grid()
 # plt.savefig('../Pres/figures/spectrum/X_scaled.pdf', bbox_inches='tight')
 plt.show()
 
-# %%
-# spectrum = read_csv('../TeX/data/[1,0,0,0,0] - [0,0,0,0,1].csv')
-data = read_csv('../TeX/data/[0,0,0,1,0] - [0,1,0,0,0].csv', names=['IX','QX','IY','QY'], index_col = False)
-
-# %%
-# spectrum = spectrum.set_index(freqs)
-X = (data.IX + data.QX*1j).to_numpy()
-Y = (data.IY + data.QY*1j).to_numpy()
-
-# %%
-x_spectrum = np.abs(fft.fftshift(fft.fft(X)))
-y_spectrum = np.abs(fft.fftshift(fft.fft(Y)))
-data_frequencies = fft.fftshift(fft.fftfreq(len(X), 1 / sample_rate)) / 1e6
-
-# %%
-plt.figure(figsize=[20,10])
-# plt.plot(frequencies, y_spectrum)
-plt.plot(data_frequencies, x_spectrum)
-# plt.plot(frequencies, spectrum)
-plt.yscale('log')
-plt.xlabel("МГц")
-# plt.axvline(101492256e-6)
-# plt.axvline(97840290e-6)
-# plt.xlim(1.5,2)
-plt.grid()
-# plt.savefig('../TeX/figures/spectrum/Y_scaled.pdf', bbox_inches='tight')
-plt.show()
-
 # %% [markdown]
 # # Работа с железом
 
@@ -328,7 +319,8 @@ sdr.rx_enabled_channels = [0,1]
 sdr.tx_buffer_size = buff_size
 sdr.rx_buffer_size = buff_size
 # Подключение: TX2 - RX1
-# sdr.tx_destroy_buffer()
+sdr.tx_destroy_buffer()
+sdr.rx_destroy_buffer()
 sdr.tx_cyclic_buffer = True
 sdr.loopback = 0
 
@@ -371,6 +363,7 @@ sdr.tx([x_dots, y_dots])
 # %%
 np.abs(x_dots).max()
 
+
 # %% [markdown]
 # # Тестирование спектров
 
@@ -389,6 +382,7 @@ def get_averaged_spectrum(sdr, average=10):
     x_spectrum = DataFrame(data = x_spectrum.imag**2 + x_spectrum.real**2, index = frequencies)
     y_spectrum = DataFrame(data = y_spectrum.imag**2 + y_spectrum.real**2, index = frequencies)
     return (x_spectrum, y_spectrum)
+
 
 # %%
 # X
@@ -539,7 +533,7 @@ x_generated_spectrum = DataFrame(data = x_generated_spectrum.imag**2 + x_generat
 y_generated_spectrum = DataFrame(data = y_generated_spectrum.imag**2 + y_generated_spectrum.real**2, index = frequencies)
 # generated_spectrum = generated_spectrum / generated_spectrum.max()
 
-# %%
+# %% tags=[]
 plt.figure(figsize=[20,10])
 plt.plot(x_measured_spectrum, label="Измеренный")
 plt.plot(x_generated_spectrum, label="Сгенерированный")
@@ -550,7 +544,7 @@ plt.legend()
 # plt.ylabel("dB")
 plt.show()
 
-# %%
+# %% tags=[]
 plt.figure(figsize=[20,10])
 plt.plot(y_measured_spectrum)
 plt.plot(y_generated_spectrum)
@@ -559,6 +553,35 @@ plt.grid()
 plt.xlabel("MHz")
 # plt.ylabel("dB")
 plt.show()
+
+# %%
+print("Values:")
+blacklist = ["gain_table_config", "multichip_sync"]
+channel_blacklist = ["fastlock_recall"]
+for dev in sdr.ctx.devices:
+    print(dev.name, "{")
+    if dev.name == "ams" or dev.name == "ad7291" or dev.name == None:
+        continue
+    for attr in dev.attrs:
+        attr = dev.attrs[attr]
+        print("\t",attr.name,end=" ")
+        if attr.name in blacklist:
+            print()
+        else:
+            print(attr.value)
+    print("Channel attrs:")
+    for channel in dev.channels:
+        print("\t",channel.name, "{")
+        for attr in channel.attrs:
+            attr = channel.attrs[attr]
+            print("\t\t",attr.name,end=" ")
+            if attr.name in channel_blacklist:
+                print()
+            else:
+                print(attr.value)
+        print("\t}")
+    print("}")
+
 
 # %%
 # X
@@ -585,6 +608,3 @@ sdr.tx([x_dots, y_dots])
 sdr.tx_destroy_buffer()
 
 # %%
-
-
-

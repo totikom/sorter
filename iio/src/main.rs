@@ -1,8 +1,7 @@
 use ad9361_iio as ad9361;
 use industrial_io as iio;
 
-use ad9361::{Signal, AD9361};
-use ad9361_iio::{RxPortSelect, TxPortSelect};
+use ad9361::{RxPortSelect, Signal, TxPortSelect, AD9361};
 use log::info;
 use plotters::prelude::*;
 use rustfft::{num_complex::Complex, FftPlanner};
