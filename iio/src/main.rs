@@ -32,16 +32,16 @@ fn main() {
     dbg!(tx.hardware_gain(1).unwrap());
 
     let rx_cfg = RxStreamCfg {
-        bandwidth: 50_000_000,
-        samplerate: 6_200_000,
-        local_oscillator: 100_000_000,
-        port: RxPortSelect::ABalanced,
+        bandwidth: 12_800_000,
+        samplerate: 16_000_000,
+        local_oscillator: 99_000_000,
+        port: RxPortSelect::BBalanced,
     };
 
     let tx_cfg = TxStreamCfg {
-        bandwidth: 50_000_000,
-        samplerate: 6_200_000,
-        local_oscillator: 100_000_000,
+        bandwidth: 12_800_000,
+        samplerate: 16_000_000,
+        local_oscillator: 99_000_000,
         port: TxPortSelect::A,
     };
 
@@ -52,7 +52,7 @@ fn main() {
     info!("configuring receiver channel 0");
     rx.set_rf_bandwidth(0, rx_cfg.bandwidth).unwrap();
     rx.set_sampling_frequency(0, rx_cfg.samplerate).unwrap();
-    rx.set_port(0, RxPortSelect::BBalanced).unwrap();
+    rx.set_port(0, rx_cfg.port).unwrap();
 
     info!("configuring receiver channel 1");
     rx.set_rf_bandwidth(1, rx_cfg.bandwidth).unwrap();
@@ -68,37 +68,67 @@ fn main() {
     rx.enable(0);
     rx.enable(1);
     tx.enable(0);
+    //tx.enable(1);
 
     info!("creating non-cyclic IIO buffers");
     tx.create_buffer(8192, true).unwrap();
     rx.create_buffer(8192, false).unwrap();
 
-    let params_sin = SinParams {
-        amplitude: 1_000.0,
-        frequency: 10_000.0,
-        phase: 0.0,
+    let params_sin = SignalParams {
+        harmonics: vec![
+            Harmonic {
+                amplitude: 10_000.0,
+                frequency: 1_100_000.0,
+                phase: 0.0,
+            },
+            Harmonic {
+                amplitude: 10_000.0,
+                frequency: -1_300_000.0,
+                phase: 0.0,
+            },
+        ],
         len: 8192,
         samplerate: tx_cfg.samplerate as usize,
     };
 
-    let params_cos = SinParams {
-        amplitude: 1_000.0,
-        frequency: 10_000.0,
-        phase: FRAC_PI_2,
+    let params_cos = SignalParams {
+        harmonics: vec![
+            Harmonic {
+                amplitude: 10_000.0,
+                frequency: 1_100_000.0,
+                phase: FRAC_PI_2,
+            },
+            Harmonic {
+                amplitude: 10_000.0,
+                frequency: -1_300_000.0,
+                phase: FRAC_PI_2,
+            },
+        ],
         len: 8192,
         samplerate: tx_cfg.samplerate as usize,
     };
 
     let signal_0 = Signal {
-        i_channel: generate_sin(&params_sin),
-        q_channel: generate_sin(&params_cos),
+        i_channel: generate_signal(&params_sin),
+        q_channel: generate_signal(&params_cos),
+    };
+
+    let signal_1 = Signal {
+        i_channel: vec![0; 8192],
+        q_channel: vec![0; 8192],
     };
 
     let (i_count, q_count) = tx.write(0, &signal_0).unwrap();
     info!(
-        "written {} and {} bytes to buffer of the channel 0",
+        "written {} and {} samples to buffer of the channel 0",
         i_count, q_count
     );
+
+    //let (i_count, q_count) = tx.write(1, &signal_1).unwrap();
+    //info!(
+    //"written {} and {} bytes to buffer of the channel 1",
+    //i_count, q_count
+    //);
 
     let bytes_pushed = tx.push_samples_to_device().unwrap();
     info!("send {} bytes to device", bytes_pushed);
@@ -108,34 +138,31 @@ fn main() {
 
     let signal_received_0 = rx.read(0).unwrap();
     let signal_received_1 = rx.read(1).unwrap();
+    dbg!(signal_received_0.i_channel.len());
+    dbg!(signal_received_1.i_channel.len());
 
     info!("plotting graphs");
     plot(
         &signal_received_0,
         rx_cfg.samplerate as usize,
         OUT_FILE_NAME_0,
-        10.0,
+        100.0,
     )
     .unwrap();
 
-    plot(
-        &signal_received_1,
-        rx_cfg.samplerate as usize,
-        OUT_FILE_NAME_1,
-        10.0,
-    )
-    .unwrap();
+    plot(&signal_0, rx_cfg.samplerate as usize, OUT_FILE_NAME_1, 1.0).unwrap();
 
     plot(
         &signal_0,
         rx_cfg.samplerate as usize,
         "target/expected_signal.png",
-        10.0,
+        100.0,
     )
     .unwrap();
 
     info!("generating spectra");
-    let expected_spectrum = spectrum(&signal_0);
+    let expected_spectrum_0 = spectrum(&signal_0);
+    let expected_spectrum_1 = spectrum(&signal_1);
     let spectrum_0 = spectrum(&signal_received_0);
 
     let spectrum_1 = spectrum(&signal_received_1);
@@ -143,7 +170,7 @@ fn main() {
     info!("plotting spectra");
     plot_spectrum(
         &spectrum_0,
-        &expected_spectrum,
+        &expected_spectrum_0,
         rx_cfg.samplerate as usize,
         SPECTRUM_FILE_NAME_0,
         rx_cfg.local_oscillator as f32,
@@ -152,7 +179,7 @@ fn main() {
 
     plot_spectrum(
         &spectrum_1,
-        &expected_spectrum,
+        &expected_spectrum_0,
         rx_cfg.samplerate as usize,
         SPECTRUM_FILE_NAME_1,
         rx_cfg.local_oscillator as f32,
@@ -288,12 +315,19 @@ fn plot_spectrum(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root_area = BitMapBackend::new(filename, (1024, 768)).into_drawing_area();
 
-    let signal: Vec<_> = signal.iter().map(|x| x.norm().powi(2)).collect();
-    let expected_signal: Vec<_> = expected_signal.iter().map(|x| x.norm().powi(2)).collect();
+    let signal: Vec<_> = signal
+        .iter()
+        .map(|x| x.norm().powi(2) / (signal.len() as f32).sqrt())
+        .collect();
+    let expected_signal: Vec<_> = expected_signal
+        .iter()
+        .map(|x| x.norm().powi(2) / (expected_signal.len() as f32).sqrt())
+        .collect();
 
     let min = signal.iter().copied().reduce(f32::min).unwrap();
     let expected_min = expected_signal.iter().copied().reduce(f32::min).unwrap();
     let min = f32::min(min, expected_min);
+    let min = if min == 0.0 { 1.0 } else { min };
 
     let max = signal.iter().copied().reduce(f32::max).unwrap();
     let expected_max = expected_signal.iter().copied().reduce(f32::max).unwrap();
@@ -365,6 +399,20 @@ fn fft_freq(n: isize, d: f32, lo: f32) -> Vec<f32> {
     }
 }
 
+fn fft_freq_shifted(n: isize, d: f32, lo: f32) -> Vec<f32> {
+    if n % 2 == 0 {
+        ((-n / 2)..n / 2)
+            .into_iter()
+            .map(|x| (x as f32) / (d * n as f32) + lo)
+            .collect::<Vec<_>>()
+    } else {
+        ((-(n - 1) / 2)..=(n - 1) / 2)
+            .into_iter()
+            .map(|x| (x as f32) / (d * n as f32) + lo)
+            .collect::<Vec<_>>()
+    }
+}
+
 fn spectrum(signal: &Signal) -> Vec<Complex<f32>> {
     let mut buffer: Vec<_> = signal
         .i_channel
@@ -404,18 +452,28 @@ struct RxStreamCfg {
 }
 
 #[derive(Debug)]
-struct SinParams {
-    frequency: f64,
-    amplitude: f64,
-    phase: f64,
+struct SignalParams {
+    harmonics: Vec<Harmonic>,
     len: usize,
     samplerate: usize,
 }
-fn generate_sin(params: &SinParams) -> Vec<i16> {
-    (0..params.len)
-        .map(|x| {
-            (((x as f64 / params.samplerate as f64) * TAU * params.frequency + params.phase).sin()
-                * params.amplitude) as i16
-        })
-        .collect()
+
+#[derive(Debug)]
+struct Harmonic {
+    frequency: f64,
+    amplitude: f64,
+    phase: f64,
+}
+
+fn generate_signal(params: &SignalParams) -> Vec<i16> {
+    let mut signal = vec![0; params.len];
+    for harmonic in &params.harmonics {
+        for (idx, value) in signal.iter_mut().enumerate() {
+            *value += (((idx as f64 / params.samplerate as f64) * TAU * harmonic.frequency
+                + harmonic.phase)
+                .cos()
+                * harmonic.amplitude) as i16;
+        }
+    }
+    signal
 }

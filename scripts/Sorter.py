@@ -339,6 +339,45 @@ sdr.tx_destroy_buffer()
 sdr.tx([x_dots, y_dots])
 
 # %%
+x_measured_spectrum, y_measured_spectrum = get_averaged_spectrum(sdr, 10)
+x_generated_spectrum_ = fft.fftshift(fft.fft(x_dots))
+y_generated_spectrum_ = fft.fftshift(fft.fft(y_dots))
+frequencies = fft.fftshift(fft.fftfreq(x_dots.shape[0], 1 / sdr.sample_rate) + sdr.rx_lo) / 1e6
+x_generated_spectrum = DataFrame(data = x_generated_spectrum_.imag**2 + x_generated_spectrum_.real**2, index = frequencies)
+y_generated_spectrum = DataFrame(data = y_generated_spectrum_.imag**2 + y_generated_spectrum_.real**2, index = frequencies)
+# generated_spectrum = generated_spectrum / generated_spectrum.max()
+x_measured_spectrum_norm = x_measured_spectrum / x_measured_spectrum.mean()
+y_measured_spectrum_norm = y_measured_spectrum / y_measured_spectrum.mean()
+x_generated_spectrum_norm = x_generated_spectrum / x_generated_spectrum.mean()
+y_generated_spectrum_norm = y_generated_spectrum / y_generated_spectrum.mean()
+
+# %%
+plt.figure(figsize=[width,height])
+plt.plot(10*np.log10(x_measured_spectrum_norm), label="Измеренный")
+plt.plot(10*np.log10(x_generated_spectrum_norm), label="Сгенерированный")
+# plt.yscale('log')
+plt.grid()
+plt.xlabel("MHz")
+plt.ylabel("dB")
+plt.legend()
+# plt.ylabel("dB")
+# plt.savefig('../TeX/figures/spectrum/X_measured_norm.pdf', bbox_inches='tight')
+plt.show()
+
+# %%
+plt.figure(figsize=[width,height])
+plt.plot(10*np.log10(y_measured_spectrum_norm), label="Измеренный")
+plt.plot(10*np.log10(y_generated_spectrum_norm), label="Сгенерированный")
+# plt.yscale('log')
+plt.grid()
+plt.xlabel("MHz")
+plt.ylabel("dB")
+plt.legend()
+# plt.ylabel("dB")
+# plt.savefig('../TeX/figures/spectrum/X_measured_norm.pdf', bbox_inches='tight')
+plt.show()
+
+# %%
 # print(
 
 # %%
@@ -606,5 +645,8 @@ sdr.tx([x_dots, y_dots])
 
 # %%
 sdr.tx_destroy_buffer()
+
+# %%
+del sdr
 
 # %%
