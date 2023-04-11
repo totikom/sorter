@@ -5,9 +5,9 @@ use ad9361::{RxPortSelect, Signal, TxPortSelect, AD9361};
 use log::info;
 use plotters::prelude::*;
 use rustfft::{num_complex::Complex, FftPlanner};
-use std::f64::consts::{FRAC_PI_2, TAU};
+use std::f32::consts::{FRAC_PI_2, TAU};
 
-const URL: &str = "172.16.1.246";
+const URL: &str = "172.16.1.251";
 const OUT_FILE_NAME_0: &str = "target/sample_0.png";
 const OUT_FILE_NAME_1: &str = "target/sample_1.png";
 const SPECTRUM_FILE_NAME_0: &str = "target/spectrum_0.png";
@@ -19,6 +19,7 @@ fn main() {
     info!("acquiring IIO context");
     let ctx =
         iio::Context::with_backend(iio::Backend::Network(URL)).expect("Failed to connect to board");
+    //print_attrs(&ctx);
 
     info!("acquiring AD9361");
     let ad = AD9361::from_ctx(&ctx).expect("Failed to acquire AD9361");
@@ -32,15 +33,15 @@ fn main() {
     dbg!(tx.hardware_gain(1).unwrap());
 
     let rx_cfg = RxStreamCfg {
-        bandwidth: 12_800_000,
-        samplerate: 16_000_000,
+        bandwidth: 16_000_000,
+        samplerate: 20_000_000,
         local_oscillator: 99_000_000,
-        port: RxPortSelect::BBalanced,
+        port: RxPortSelect::ABalanced,
     };
 
     let tx_cfg = TxStreamCfg {
-        bandwidth: 12_800_000,
-        samplerate: 16_000_000,
+        bandwidth: 16_000_000,
+        samplerate: 20_000_000,
         local_oscillator: 99_000_000,
         port: TxPortSelect::A,
     };
@@ -60,78 +61,92 @@ fn main() {
     rx.set_port(1, RxPortSelect::ABalanced).unwrap();
 
     info!("configuring transmitter channel 0");
+    tx.set_hardware_gain(0, 0.0).unwrap();
     tx.set_rf_bandwidth(0, tx_cfg.bandwidth).unwrap();
     tx.set_sampling_frequency(0, tx_cfg.samplerate).unwrap();
     tx.set_port(0, TxPortSelect::A).unwrap();
+
+    info!("configuring transmitter channel 1");
+    tx.set_hardware_gain(1, 0.0).unwrap();
+    tx.set_rf_bandwidth(1, tx_cfg.bandwidth).unwrap();
+    tx.set_sampling_frequency(1, tx_cfg.samplerate).unwrap();
+    tx.set_port(1, TxPortSelect::A).unwrap();
 
     info!("enabling channels");
     rx.enable(0);
     rx.enable(1);
     tx.enable(0);
-    //tx.enable(1);
+    tx.enable(1);
 
     info!("creating non-cyclic IIO buffers");
     tx.create_buffer(8192, true).unwrap();
     rx.create_buffer(8192, false).unwrap();
 
-    let params_sin = SignalParams {
-        harmonics: vec![
-            Harmonic {
-                amplitude: 10_000.0,
-                frequency: 1_100_000.0,
-                phase: 0.0,
-            },
-            Harmonic {
-                amplitude: 10_000.0,
-                frequency: -1_300_000.0,
-                phase: 0.0,
-            },
-        ],
+    let params_0 = SignalParams {
+        harmonics: vec![Harmonic {
+            amplitude: 0.99,
+            frequency: 1_000_000.0,
+            phase: 0.0,
+        }],
         len: 8192,
         samplerate: tx_cfg.samplerate as usize,
     };
 
-    let params_cos = SignalParams {
-        harmonics: vec![
-            Harmonic {
-                amplitude: 10_000.0,
-                frequency: 1_100_000.0,
-                phase: FRAC_PI_2,
-            },
-            Harmonic {
-                amplitude: 10_000.0,
-                frequency: -1_300_000.0,
-                phase: FRAC_PI_2,
-            },
-        ],
+    let params_1 = SignalParams {
+        harmonics: vec![Harmonic {
+            amplitude: 0.99,
+            frequency: 1_000_000.0,
+            phase: 0.0,
+        }],
         len: 8192,
         samplerate: tx_cfg.samplerate as usize,
     };
+
+    let signal_0 = generate_signal(&params_0);
+    let signal_1 = generate_signal(&params_1);
 
     let signal_0 = Signal {
-        i_channel: generate_signal(&params_sin),
-        q_channel: generate_signal(&params_cos),
+        i_channel: scale_signal(signal_0.0),
+        q_channel: scale_signal(signal_0.1),
     };
 
     let signal_1 = Signal {
-        i_channel: vec![0; 8192],
-        q_channel: vec![0; 8192],
+        i_channel: scale_signal(signal_1.0),
+        q_channel: scale_signal(signal_1.1),
     };
+
+    //let signal_0 = Signal {
+    //i_channel: vec![1 << 15 - 1; 8192],
+    //q_channel: vec![1 << 15 - 1; 8192],
+    //};
+
+    //let signal_1 = Signal {
+    //i_channel: vec![1 << 10; 8192],
+    //q_channel: vec![1 << 10; 8192],
+    //};
+
+    dbg!(rx.hardware_gain(0).unwrap());
+    dbg!(rx.hardware_gain(1).unwrap());
+    dbg!(tx.hardware_gain(0).unwrap());
+    dbg!(tx.hardware_gain(1).unwrap());
 
     let (i_count, q_count) = tx.write(0, &signal_0).unwrap();
     info!(
         "written {} and {} samples to buffer of the channel 0",
         i_count, q_count
     );
-
-    //let (i_count, q_count) = tx.write(1, &signal_1).unwrap();
-    //info!(
-    //"written {} and {} bytes to buffer of the channel 1",
-    //i_count, q_count
-    //);
+    let (i_count, q_count) = tx.write(1, &signal_1).unwrap();
+    info!(
+        "written {} and {} samples to buffer of the channel 1",
+        i_count, q_count
+    );
 
     let bytes_pushed = tx.push_samples_to_device().unwrap();
     info!("send {} bytes to device", bytes_pushed);
+
+    let mut line = String::new();
+    println!("Press Enter to continue:");
+    std::io::stdin().read_line(&mut line).unwrap();
 
     let bytes_pooled = rx.pool_samples_to_buff().unwrap();
     info!("received {} bytes from device", bytes_pooled);
@@ -141,50 +156,56 @@ fn main() {
     dbg!(signal_received_0.i_channel.len());
     dbg!(signal_received_1.i_channel.len());
 
-    info!("plotting graphs");
-    plot(
-        &signal_received_0,
-        rx_cfg.samplerate as usize,
-        OUT_FILE_NAME_0,
-        100.0,
-    )
-    .unwrap();
+    //info!("plotting graphs");
+    //plot(
+        //&signal_received_0,
+        //rx_cfg.samplerate as usize,
+        //OUT_FILE_NAME_0,
+        //100.0,
+    //)
+    //.unwrap();
 
-    plot(&signal_0, rx_cfg.samplerate as usize, OUT_FILE_NAME_1, 1.0).unwrap();
+    //plot(
+        //&signal_received_1,
+        //rx_cfg.samplerate as usize,
+        //OUT_FILE_NAME_1,
+        //100.0,
+    //)
+    //.unwrap();
 
-    plot(
-        &signal_0,
-        rx_cfg.samplerate as usize,
-        "target/expected_signal.png",
-        100.0,
-    )
-    .unwrap();
+    //plot(
+        //&signal_0,
+        //rx_cfg.samplerate as usize,
+        //"target/expected_signal.png",
+        //100.0,
+    //)
+    //.unwrap();
 
-    info!("generating spectra");
-    let expected_spectrum_0 = spectrum(&signal_0);
-    let expected_spectrum_1 = spectrum(&signal_1);
-    let spectrum_0 = spectrum(&signal_received_0);
+    //info!("generating spectra");
+    //let expected_spectrum_0 = spectrum(&signal_0);
+    //let expected_spectrum_1 = spectrum(&signal_1);
+    //let spectrum_0 = spectrum(&signal_received_0);
 
-    let spectrum_1 = spectrum(&signal_received_1);
+    //let spectrum_1 = spectrum(&signal_received_1);
 
-    info!("plotting spectra");
-    plot_spectrum(
-        &spectrum_0,
-        &expected_spectrum_0,
-        rx_cfg.samplerate as usize,
-        SPECTRUM_FILE_NAME_0,
-        rx_cfg.local_oscillator as f32,
-    )
-    .unwrap();
+    //info!("plotting spectra");
+    //plot_spectrum(
+        //&spectrum_0,
+        //&expected_spectrum_0,
+        //rx_cfg.samplerate as usize,
+        //SPECTRUM_FILE_NAME_0,
+        //rx_cfg.local_oscillator as f32,
+    //)
+    //.unwrap();
 
-    plot_spectrum(
-        &spectrum_1,
-        &expected_spectrum_0,
-        rx_cfg.samplerate as usize,
-        SPECTRUM_FILE_NAME_1,
-        rx_cfg.local_oscillator as f32,
-    )
-    .unwrap();
+    //plot_spectrum(
+        //&spectrum_1,
+        //&expected_spectrum_0,
+        //rx_cfg.samplerate as usize,
+        //SPECTRUM_FILE_NAME_1,
+        //rx_cfg.local_oscillator as f32,
+    //)
+    //.unwrap();
 
     info!("Cleaning up");
     rx.destroy_buffer();
@@ -460,20 +481,66 @@ struct SignalParams {
 
 #[derive(Debug)]
 struct Harmonic {
-    frequency: f64,
-    amplitude: f64,
-    phase: f64,
+    frequency: f32,
+    amplitude: f32,
+    phase: f32,
 }
 
-fn generate_signal(params: &SignalParams) -> Vec<i16> {
-    let mut signal = vec![0; params.len];
+fn generate_signal(params: &SignalParams) -> (Vec<f32>,Vec<f32>) {
+    let mut i_signal = vec![0.0; params.len];
+    let mut q_signal = vec![0.0; params.len];
     for harmonic in &params.harmonics {
-        for (idx, value) in signal.iter_mut().enumerate() {
-            *value += (((idx as f64 / params.samplerate as f64) * TAU * harmonic.frequency
-                + harmonic.phase)
-                .cos()
-                * harmonic.amplitude) as i16;
+        for (idx, (i, q)) in i_signal.iter_mut().zip(q_signal.iter_mut()).enumerate() {
+            let arg = ((idx as f32 / params.samplerate as f32) * TAU * harmonic.frequency
+                + harmonic.phase);
+            *i += arg.cos() * harmonic.amplitude;
+            *q += arg.sin() * harmonic.amplitude;
         }
     }
+    (i_signal, q_signal)
+}
+
+fn scale_signal(signal: Vec<f32>) -> Vec<u16> {
     signal
+        .iter()
+        .map(|&(mut x)| {
+            // shift signal to [0,2] range
+            x = x + 1.0;
+            // scale signal to [0,2^16 -1]
+            x = x * 2.0_f32.powi(14);
+            // cast to u16
+            x as u16
+        })
+        .collect()
+}
+
+fn print_attrs(ctx: &iio::Context) {
+    println!("Ctx attributes:");
+    for (name, value) in ctx.attributes() {
+        println!("\t{}:{}", name, value);
+    }
+    println!("Devices:");
+    for dev in ctx.devices() {
+        println!(
+            "{} [{}]: {} channel(s)",
+            dev.id().unwrap_or_default(),
+            dev.name().unwrap_or_default(),
+            dev.num_channels(),
+        );
+        for channel in dev.channels() {
+            println!(
+                "\tid: {}, is_output: {}, type: {:?}",
+                channel.id().unwrap_or_default(),
+                channel.is_output(),
+                channel.channel_type()
+            );
+            for (attr, value) in channel.attr_read_all().unwrap() {
+                println!("\t\t{}:\t{}", attr, value);
+            }
+        }
+        println!("\tDevice attributes:");
+        for (attr, value) in dev.attr_read_all().unwrap() {
+            println!("\t\t{}:\t{}", attr, value);
+        }
+    }
 }
