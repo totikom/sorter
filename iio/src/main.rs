@@ -81,8 +81,7 @@ fn main() {
     info!("creating non-cyclic IIO buffers");
     tx.create_buffer(8192, true).unwrap();
     rx.create_buffer(8192, false).unwrap();
-
-    let params_0 = SignalParams {
+    let params_x = SignalParams {
         harmonics: vec![Harmonic {
             amplitude: 1.0,
             frequency: 2_000_000.0,
@@ -92,7 +91,7 @@ fn main() {
         samplerate: tx_cfg.samplerate as usize,
     };
 
-    let params_1 = SignalParams {
+    let params_y = SignalParams {
         harmonics: vec![Harmonic {
             amplitude: 1.0,
             frequency: 2_000_000.0,
@@ -105,15 +104,14 @@ fn main() {
     let signal_0 = generate_signal(&params_0);
     let signal_1 = generate_signal(&params_1);
 
-    let scale = 2.0_f32.powi(15);
-    let signal_0 = Signal {
-        i_channel: scale_signal(signal_0.0, scale),
-        q_channel: scale_signal(signal_0.1, scale),
+    let signal_x = Signal {
+        i_channel: scale_signal(signal_x.0),
+        q_channel: scale_signal(signal_x.1),
     };
 
-    let signal_1 = Signal {
-        i_channel: scale_signal(signal_1.0, scale),
-        q_channel: scale_signal(signal_1.1, scale),
+    let signal_y = Signal {
+        i_channel: scale_signal(signal_y.0),
+        q_channel: scale_signal(signal_y.1),
     };
 
     //let signal_0 = Signal {
@@ -126,12 +124,12 @@ fn main() {
     //q_channel: vec![0; 8192],
     //};
 
-    let (i_count, q_count) = tx.write(0, &signal_0).unwrap();
+    let (i_count, q_count) = tx.write(0, &signal_x).unwrap();
     info!(
         "written {} and {} samples to buffer of the channel 0",
         i_count, q_count
     );
-    let (i_count, q_count) = tx.write(1, &signal_1).unwrap();
+    let (i_count, q_count) = tx.write(1, &signal_y).unwrap();
     info!(
         "written {} and {} samples to buffer of the channel 1",
         i_count, q_count
@@ -572,7 +570,7 @@ fn generate_signal(params: &SignalParams) -> (Vec<f32>, Vec<f32>) {
     (i_signal, q_signal)
 }
 
-fn scale_signal(signal: Vec<f32>, scale: f32) -> Vec<i16> {
+fn scale_signal(signal: Vec<f32>) -> Vec<i16> {
     signal
         .iter()
         .map(|&(mut x)| {
@@ -582,7 +580,7 @@ fn scale_signal(signal: Vec<f32>, scale: f32) -> Vec<i16> {
                 x => x,
             };
             // scale signal to [0,2^12 -1]
-            x = x * scale;
+            x = x * 2.0_f32.powi(15);
             // cast to i16
             x as i16
         })
