@@ -95,7 +95,7 @@ fn main() {
     let params_1 = SignalParams {
         harmonics: vec![Harmonic {
             amplitude: 1.0,
-            frequency: 3_500_000.0,
+            frequency: 2_000_000.0,
             phase: 0.0,
         }],
         len: 8192,
@@ -105,15 +105,15 @@ fn main() {
     let signal_0 = generate_signal(&params_0);
     let signal_1 = generate_signal(&params_1);
 
-    let scale = 2.0_f32.powi(12);
+    let scale = 2.0_f32.powi(15);
     let signal_0 = Signal {
-    i_channel: scale_signal(signal_0.0, scale),
-    q_channel: scale_signal(signal_0.1, scale),
+        i_channel: scale_signal(signal_0.0, scale),
+        q_channel: scale_signal(signal_0.1, scale),
     };
 
     let signal_1 = Signal {
-    i_channel: scale_signal(signal_1.0, scale),
-    q_channel: scale_signal(signal_1.1, scale),
+        i_channel: scale_signal(signal_1.0, scale),
+        q_channel: scale_signal(signal_1.1, scale),
     };
 
     //let signal_0 = Signal {
@@ -128,13 +128,13 @@ fn main() {
 
     let (i_count, q_count) = tx.write(0, &signal_0).unwrap();
     info!(
-    "written {} and {} samples to buffer of the channel 0",
-    i_count, q_count
+        "written {} and {} samples to buffer of the channel 0",
+        i_count, q_count
     );
     let (i_count, q_count) = tx.write(1, &signal_1).unwrap();
     info!(
-    "written {} and {} samples to buffer of the channel 1",
-    i_count, q_count
+        "written {} and {} samples to buffer of the channel 1",
+        i_count, q_count
     );
 
     let bytes_pushed = tx.push_samples_to_device().unwrap();
@@ -155,129 +155,129 @@ fn main() {
     //println!("amp\trx_0\trx_1");
     //let k = 128;
     //for i in (0..k)
-        //.into_iter()
-        //.map(|i| (2.0_f32.powf(16.0 * i as f32 / k as f32)))
+    //.into_iter()
+    //.map(|i| (2.0_f32.powf(16.0 * i as f32 / k as f32)))
     //{
-        ////rx.destroy_buffer();
-        //tx.destroy_buffer();
+    ////rx.destroy_buffer();
+    //tx.destroy_buffer();
 
-        //tx.create_buffer(8192, true).unwrap();
-        ////rx.create_buffer(8192, true).unwrap();
-        //let i_channel: Vec<u16> = signal_0
-            //.0
-            //.iter()
-            //.map(|&(mut x)| {
-                //x = match x {
-                    //x if x > 1.0 => 1.0,
-                    //x if x < -1.0 => -1.0,
-                    //x => x,
-                //};
-                //// shift signal to [0,2] range
-                ////x = x + 1.0;
-                //// scale signal
-                //x = x * 2.0_f32.powi(i as i32);
-                //// cast to u16
-                //let x = x as i16;
-                //x as u16
-            //})
-            //.collect();
+    //tx.create_buffer(8192, true).unwrap();
+    ////rx.create_buffer(8192, true).unwrap();
+    //let i_channel: Vec<u16> = signal_0
+    //.0
+    //.iter()
+    //.map(|&(mut x)| {
+    //x = match x {
+    //x if x > 1.0 => 1.0,
+    //x if x < -1.0 => -1.0,
+    //x => x,
+    //};
+    //// shift signal to [0,2] range
+    ////x = x + 1.0;
+    //// scale signal
+    //x = x * 2.0_f32.powi(i as i32);
+    //// cast to u16
+    //let x = x as i16;
+    //x as u16
+    //})
+    //.collect();
 
-        //let q_channel: Vec<u16> = signal_0
-            //.1
-            //.iter()
-            //.map(|&(mut x)| {
-                //x = match x {
-                    //x if x > 1.0 => 1.0,
-                    //x if x < -1.0 => -1.0,
-                    //x => x,
-                //};
-                //// shift signal to [0,2] range
-                ////x = x + 1.0;
-                //// scale signal
-                //x = x * i;
-                //// cast to u16
-                //let x = x as i16;
-                //x as u16
-            //})
-            //.collect();
+    //let q_channel: Vec<u16> = signal_0
+    //.1
+    //.iter()
+    //.map(|&(mut x)| {
+    //x = match x {
+    //x if x > 1.0 => 1.0,
+    //x if x < -1.0 => -1.0,
+    //x => x,
+    //};
+    //// shift signal to [0,2] range
+    ////x = x + 1.0;
+    //// scale signal
+    //x = x * i;
+    //// cast to u16
+    //let x = x as i16;
+    //x as u16
+    //})
+    //.collect();
 
-        //let signal = Signal {
-            //i_channel,
-            //q_channel,
-        //};
+    //let signal = Signal {
+    //i_channel,
+    //q_channel,
+    //};
 
-        //tx.write(0, &signal).unwrap();
-        //tx.write(1, &signal).unwrap();
+    //tx.write(0, &signal).unwrap();
+    //tx.write(1, &signal).unwrap();
 
-        //tx.push_samples_to_device().unwrap();
+    //tx.push_samples_to_device().unwrap();
 
-        ////rx.pool_samples_to_buff().unwrap();
+    ////rx.pool_samples_to_buff().unwrap();
 
-        //let mut gain_0 = 0.0;
-        //let mut gain_1 = 0.0;
+    //let mut gain_0 = 0.0;
+    //let mut gain_1 = 0.0;
 
-        //let n = 10;
-        //for _ in 0..n {
-            //std::thread::sleep(std::time::Duration::from_millis(10));
-            //gain_0 += rx.rssi(0).unwrap();
-            //gain_1 += rx.rssi(1).unwrap();
-        //}
-        //gain_0 /= n as f64;
-        //gain_1 /= n as f64;
+    //let n = 10;
+    //for _ in 0..n {
+    //std::thread::sleep(std::time::Duration::from_millis(10));
+    //gain_0 += rx.rssi(0).unwrap();
+    //gain_1 += rx.rssi(1).unwrap();
+    //}
+    //gain_0 /= n as f64;
+    //gain_1 /= n as f64;
 
-        //println!("{i}\t{}\t{}", gain_0, gain_1,);
+    //println!("{i}\t{}\t{}", gain_0, gain_1,);
     //}
 
-    //info!("plotting graphs");
-    //plot(
-    //&signal_received_0,
-    //rx_cfg.samplerate as usize,
-    //OUT_FILE_NAME_0,
-    //100.0,
-    //)
-    //.unwrap();
+    info!("plotting graphs");
+    plot(
+        &signal_received_0,
+        rx_cfg.samplerate as usize,
+        OUT_FILE_NAME_0,
+        100.0,
+    )
+    .unwrap();
 
-    //plot(
-    //&signal_received_1,
-    //rx_cfg.samplerate as usize,
-    //OUT_FILE_NAME_1,
-    //100.0,
-    //)
-    //.unwrap();
+    plot(
+        &signal_received_1,
+        rx_cfg.samplerate as usize,
+        OUT_FILE_NAME_1,
+        100.0,
+    )
+    .unwrap();
 
-    //plot(
-    //&signal_0,
-    //rx_cfg.samplerate as usize,
-    //"target/expected_signal.png",
-    //100.0,
-    //)
-    //.unwrap();
+    plot(
+        &signal_0,
+        rx_cfg.samplerate as usize,
+        "target/expected_signal.png",
+        100.0,
+    )
+    .unwrap();
 
-    //info!("generating spectra");
-    //let expected_spectrum_0 = spectrum(&signal_0);
-    //let expected_spectrum_1 = spectrum(&signal_1);
-    //let spectrum_0 = spectrum(&signal_received_0);
+    info!("generating spectra");
+    let expected_spectrum_0 = spectrum(&signal_0);
+    let expected_spectrum_1 = spectrum(&signal_1);
+    let spectrum_0 = spectrum(&signal_received_0);
 
-    //let spectrum_1 = spectrum(&signal_received_1);
+    let spectrum_1 = spectrum(&signal_received_1);
 
-    //info!("plotting spectra");
-    //plot_spectrum(
-    //&spectrum_0,
-    //&expected_spectrum_0,
-    //rx_cfg.samplerate as usize,
-    //SPECTRUM_FILE_NAME_0,
-    //rx_cfg.local_oscillator as f32,
-    //)
-    //.unwrap();
+    info!("plotting spectra");
+    plot_spectrum(
+        &spectrum_0,
+        &expected_spectrum_0,
+        rx_cfg.samplerate as usize,
+        SPECTRUM_FILE_NAME_0,
+        rx_cfg.local_oscillator as f32,
+    )
+    .unwrap();
 
-    //plot_spectrum(
-    //&spectrum_1,
-    //&expected_spectrum_0,
-    //rx_cfg.samplerate as usize,
-    //SPECTRUM_FILE_NAME_1,
-    //rx_cfg.local_oscillator as f32,
-    //)
-    //.unwrap();
+    plot_spectrum(
+        &spectrum_1,
+        &expected_spectrum_1,
+        rx_cfg.samplerate as usize,
+        SPECTRUM_FILE_NAME_1,
+        rx_cfg.local_oscillator as f32,
+    )
+    .unwrap();
 
     info!("Cleaning up");
     rx.destroy_buffer();
@@ -572,7 +572,7 @@ fn generate_signal(params: &SignalParams) -> (Vec<f32>, Vec<f32>) {
     (i_signal, q_signal)
 }
 
-fn scale_signal(signal: Vec<f32>, scale: f32) -> Vec<u16> {
+fn scale_signal(signal: Vec<f32>, scale: f32) -> Vec<i16> {
     signal
         .iter()
         .map(|&(mut x)| {
@@ -581,12 +581,10 @@ fn scale_signal(signal: Vec<f32>, scale: f32) -> Vec<u16> {
                 x if x < -1.0 => -1.0,
                 x => x,
             };
-            // shift signal to [0,2] range
-            //x = x + 1.0;
             // scale signal to [0,2^12 -1]
             x = x * scale;
-            // cast to u16
-            (x as i16) as u16
+            // cast to i16
+            x as i16
         })
         .collect()
 }

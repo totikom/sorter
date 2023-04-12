@@ -6,7 +6,6 @@ version = 3
 name = "ad9361-iio"
 version = "0.0.0"
 dependencies = [
- "bytemuck",
  "industrial-io",
 ]
 
