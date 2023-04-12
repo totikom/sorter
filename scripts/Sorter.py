@@ -7,9 +7,9 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.14.4
+#       jupytext_version: 1.14.5
 #   kernelspec:
-#     display_name: Python 3 (ipykernel)
+#     display_name: Python 3
 #     language: python
 #     name: python3
 # ---
@@ -246,7 +246,7 @@ def generate_picture_bundle(direction, coord, input_array, output_array, time):
 # Тестирование размера буфера
 transition_time(coord_to_freq(0, True), coord_to_freq(4, True)) * sample_rate
 
-# %% tags=[]
+# %%
 start = 4
 stop = 0
 direction = False
@@ -572,7 +572,7 @@ x_generated_spectrum = DataFrame(data = x_generated_spectrum.imag**2 + x_generat
 y_generated_spectrum = DataFrame(data = y_generated_spectrum.imag**2 + y_generated_spectrum.real**2, index = frequencies)
 # generated_spectrum = generated_spectrum / generated_spectrum.max()
 
-# %% tags=[]
+# %%
 plt.figure(figsize=[20,10])
 plt.plot(x_measured_spectrum, label="Измеренный")
 plt.plot(x_generated_spectrum, label="Сгенерированный")
@@ -583,7 +583,7 @@ plt.legend()
 # plt.ylabel("dB")
 plt.show()
 
-# %% tags=[]
+# %%
 plt.figure(figsize=[20,10])
 plt.plot(y_measured_spectrum)
 plt.plot(y_generated_spectrum)

@@ -12,6 +12,7 @@ const OUT_FILE_NAME_0: &str = "target/sample_0.png";
 const OUT_FILE_NAME_1: &str = "target/sample_1.png";
 const SPECTRUM_FILE_NAME_0: &str = "target/spectrum_0.png";
 const SPECTRUM_FILE_NAME_1: &str = "target/spectrum_1.png";
+const BUFF_SIZE: usize = 32_792;
 
 fn main() {
     env_logger::init();
@@ -35,14 +36,14 @@ fn main() {
     let rx_cfg = RxStreamCfg {
         bandwidth: 16_000_000,
         samplerate: 20_000_000,
-        local_oscillator: 99_000_000,
+        local_oscillator: 95_000_000,
         port: RxPortSelect::ABalanced,
     };
 
     let tx_cfg = TxStreamCfg {
         bandwidth: 16_000_000,
         samplerate: 20_000_000,
-        local_oscillator: 99_000_000,
+        local_oscillator: 95_000_000,
         port: TxPortSelect::A,
     };
 
@@ -79,30 +80,48 @@ fn main() {
     tx.enable(1);
 
     info!("creating non-cyclic IIO buffers");
-    tx.create_buffer(8192, true).unwrap();
-    rx.create_buffer(8192, false).unwrap();
+    tx.create_buffer(BUFF_SIZE, true).unwrap();
+    rx.create_buffer(BUFF_SIZE, false).unwrap();
+
     let params_x = SignalParams {
-        harmonics: vec![Harmonic {
-            amplitude: 1.0,
-            frequency: 2_000_000.0,
-            phase: 0.0,
-        }],
-        len: 8192,
+        harmonics: vec![
+            Harmonic {
+                amplitude: 0.8,
+                frequency: 4_000_000.0,
+                phase: FRAC_PI_2,
+            },
+            Harmonic {
+                amplitude: 0.8,
+                frequency: -4_000_000.0,
+                phase: 0.0,
+            },
+        ],
+        len: BUFF_SIZE,
         samplerate: tx_cfg.samplerate as usize,
     };
 
     let params_y = SignalParams {
         harmonics: vec![Harmonic {
             amplitude: 1.0,
-            frequency: 2_000_000.0,
-            phase: 0.0,
+            frequency: 1_000_000.0,
+            phase: FRAC_PI_2,
         }],
-        len: 8192,
+        len: BUFF_SIZE,
         samplerate: tx_cfg.samplerate as usize,
     };
 
-    let signal_0 = generate_signal(&params_0);
-    let signal_1 = generate_signal(&params_1);
+    let sweep_params = SweepParams {
+        amplitude: 1.0,          // must be in [0.0, 1.0]
+        start_freq: 4_000_000.0, // Hz
+        end_freq: -4_000_000.0,  // Hz
+        sweep_speed: 40e9,       // Hz/sec
+        len: BUFF_SIZE,
+        samplerate: tx_cfg.samplerate as usize,
+    };
+
+    let signal_x = sweep_signal(&sweep_params);
+    //let signal_x = generate_signal(&params_x);
+    let signal_y = generate_signal(&params_y);
 
     let signal_x = Signal {
         i_channel: scale_signal(signal_x.0),
@@ -142,140 +161,64 @@ fn main() {
     println!("Press Enter to continue:");
     std::io::stdin().read_line(&mut line).unwrap();
 
-    let bytes_pooled = rx.pool_samples_to_buff().unwrap();
-    info!("received {} bytes from device", bytes_pooled);
+    //let bytes_pooled = rx.pool_samples_to_buff().unwrap();
+    //info!("received {} bytes from device", bytes_pooled);
 
-    let signal_received_0 = rx.read(0).unwrap();
-    let signal_received_1 = rx.read(1).unwrap();
-    dbg!(signal_received_0.i_channel.len());
-    dbg!(signal_received_1.i_channel.len());
+    //let signal_received_0 = rx.read(0).unwrap();
+    //let signal_received_1 = rx.read(1).unwrap();
+    //dbg!(signal_received_0.i_channel.len());
+    //dbg!(signal_received_1.i_channel.len());
 
-    //println!("amp\trx_0\trx_1");
-    //let k = 128;
-    //for i in (0..k)
-    //.into_iter()
-    //.map(|i| (2.0_f32.powf(16.0 * i as f32 / k as f32)))
-    //{
-    ////rx.destroy_buffer();
-    //tx.destroy_buffer();
+    //info!("plotting graphs");
+    //plot(
+    //&signal_received_0,
+    //rx_cfg.samplerate as usize,
+    //OUT_FILE_NAME_0,
+    //100.0,
+    //)
+    //.unwrap();
 
-    //tx.create_buffer(8192, true).unwrap();
-    ////rx.create_buffer(8192, true).unwrap();
-    //let i_channel: Vec<u16> = signal_0
-    //.0
-    //.iter()
-    //.map(|&(mut x)| {
-    //x = match x {
-    //x if x > 1.0 => 1.0,
-    //x if x < -1.0 => -1.0,
-    //x => x,
-    //};
-    //// shift signal to [0,2] range
-    ////x = x + 1.0;
-    //// scale signal
-    //x = x * 2.0_f32.powi(i as i32);
-    //// cast to u16
-    //let x = x as i16;
-    //x as u16
-    //})
-    //.collect();
+    //plot(
+    //&signal_received_1,
+    //rx_cfg.samplerate as usize,
+    //OUT_FILE_NAME_1,
+    //100.0,
+    //)
+    //.unwrap();
 
-    //let q_channel: Vec<u16> = signal_0
-    //.1
-    //.iter()
-    //.map(|&(mut x)| {
-    //x = match x {
-    //x if x > 1.0 => 1.0,
-    //x if x < -1.0 => -1.0,
-    //x => x,
-    //};
-    //// shift signal to [0,2] range
-    ////x = x + 1.0;
-    //// scale signal
-    //x = x * i;
-    //// cast to u16
-    //let x = x as i16;
-    //x as u16
-    //})
-    //.collect();
+    //plot(
+    //&signal_0,
+    //rx_cfg.samplerate as usize,
+    //"target/expected_signal.png",
+    //100.0,
+    //)
+    //.unwrap();
 
-    //let signal = Signal {
-    //i_channel,
-    //q_channel,
-    //};
+    //info!("generating spectra");
+    //let expected_spectrum_0 = spectrum(&signal_0);
+    //let expected_spectrum_1 = spectrum(&signal_1);
+    //let spectrum_0 = spectrum(&signal_received_0);
 
-    //tx.write(0, &signal).unwrap();
-    //tx.write(1, &signal).unwrap();
+    //let spectrum_1 = spectrum(&signal_received_1);
 
-    //tx.push_samples_to_device().unwrap();
+    //info!("plotting spectra");
+    //plot_spectrum(
+    //&spectrum_0,
+    //&expected_spectrum_0,
+    //rx_cfg.samplerate as usize,
+    //SPECTRUM_FILE_NAME_0,
+    //rx_cfg.local_oscillator as f32,
+    //)
+    //.unwrap();
 
-    ////rx.pool_samples_to_buff().unwrap();
-
-    //let mut gain_0 = 0.0;
-    //let mut gain_1 = 0.0;
-
-    //let n = 10;
-    //for _ in 0..n {
-    //std::thread::sleep(std::time::Duration::from_millis(10));
-    //gain_0 += rx.rssi(0).unwrap();
-    //gain_1 += rx.rssi(1).unwrap();
-    //}
-    //gain_0 /= n as f64;
-    //gain_1 /= n as f64;
-
-    //println!("{i}\t{}\t{}", gain_0, gain_1,);
-    //}
-
-    info!("plotting graphs");
-    plot(
-        &signal_received_0,
-        rx_cfg.samplerate as usize,
-        OUT_FILE_NAME_0,
-        100.0,
-    )
-    .unwrap();
-
-    plot(
-        &signal_received_1,
-        rx_cfg.samplerate as usize,
-        OUT_FILE_NAME_1,
-        100.0,
-    )
-    .unwrap();
-
-    plot(
-        &signal_0,
-        rx_cfg.samplerate as usize,
-        "target/expected_signal.png",
-        100.0,
-    )
-    .unwrap();
-
-    info!("generating spectra");
-    let expected_spectrum_0 = spectrum(&signal_0);
-    let expected_spectrum_1 = spectrum(&signal_1);
-    let spectrum_0 = spectrum(&signal_received_0);
-
-    let spectrum_1 = spectrum(&signal_received_1);
-
-    info!("plotting spectra");
-    plot_spectrum(
-        &spectrum_0,
-        &expected_spectrum_0,
-        rx_cfg.samplerate as usize,
-        SPECTRUM_FILE_NAME_0,
-        rx_cfg.local_oscillator as f32,
-    )
-    .unwrap();
-
-    plot_spectrum(
-        &spectrum_1,
-        &expected_spectrum_1,
-        rx_cfg.samplerate as usize,
-        SPECTRUM_FILE_NAME_1,
-        rx_cfg.local_oscillator as f32,
-    )
-    .unwrap();
+    //plot_spectrum(
+    //&spectrum_1,
+    //&expected_spectrum_1,
+    //rx_cfg.samplerate as usize,
+    //SPECTRUM_FILE_NAME_1,
+    //rx_cfg.local_oscillator as f32,
+    //)
+    //.unwrap();
 
     info!("Cleaning up");
     rx.destroy_buffer();
@@ -616,4 +559,37 @@ fn print_attrs(ctx: &iio::Context) {
             println!("\t\t{}:\t{}", attr, value);
         }
     }
+}
+
+#[derive(Debug)]
+struct SweepParams {
+    start_freq: f32,
+    end_freq: f32,
+    sweep_speed: f32,
+    amplitude: f32,
+    len: usize,
+    samplerate: usize,
+}
+
+fn sweep_signal(params: &SweepParams) -> (Vec<f32>, Vec<f32>) {
+    let sweep_time = (params.start_freq - params.end_freq).abs() / params.sweep_speed;
+    let direction = (params.start_freq - params.end_freq).signum();
+
+    assert!(sweep_time <= params.len as f32 / params.samplerate as f32);
+
+    let (i_signal, q_signal): (Vec<f32>, Vec<f32>) = (0..params.len)
+        .into_iter()
+        .map(|i| {
+            let t = (i as f32 / params.samplerate as f32);
+            let arg = if t < sweep_time {
+                let freq = params.start_freq + direction * params.sweep_speed * t;
+                t * TAU * freq
+            } else {
+                t * TAU * params.end_freq
+            };
+
+            (arg.cos() * params.amplitude, arg.sin() * params.amplitude)
+        })
+        .unzip();
+    (i_signal, q_signal)
 }
