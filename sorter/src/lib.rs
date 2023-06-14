@@ -6,14 +6,14 @@ use std::f64::consts::TAU;
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct TrapParams<const WIDTH: usize, const HEIGHT: usize> {
-    x_frequencies: [f64; WIDTH],     // in Hz
-    y_frequencies: [f64; HEIGHT],    // in Hz
-    turn_on_time: f64,               // is seconds, time to turn on the laser
-    local_oscillator_frequency: f64, // in Hz
-    signal_amplitude: f64,           // amplitude of one harmonic
-    buff_size: usize,                // Size of the SDR buffer
-    sample_rate: f64,                // Sample rate of the SDR
-    atom_speed: f64,                 // in Hz/s
+    pub x_frequencies: [f64; WIDTH],     // in Hz
+    pub y_frequencies: [f64; HEIGHT],    // in Hz
+    pub turn_on_time: f64,               // is seconds, time to turn on the laser
+    pub local_oscillator_frequency: f64, // in Hz
+    pub signal_amplitude: f64,           // amplitude of one harmonic
+    pub buff_size: usize,                // Size of the SDR buffer
+    pub sample_rate: f64,                // Sample rate of the SDR
+    pub atom_speed: f64,                 // in Hz/s
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -141,6 +141,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
         (moves, shifted_trap)
     }
 
+    #[must_use]
     pub fn from_nums(array: &[[u8; WIDTH]; HEIGHT]) -> Self {
         let mut new_array = [[false; WIDTH]; HEIGHT];
         for (i, row) in new_array.iter_mut().enumerate() {
@@ -154,6 +155,7 @@ impl<const WIDTH: usize, const HEIGHT: usize> Trap<WIDTH, HEIGHT> {
         Self(new_array)
     }
 
+    #[must_use]
     pub fn from_bools(array: [[bool; WIDTH]; HEIGHT]) -> Self {
         Self(array)
     }
